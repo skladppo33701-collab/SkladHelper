@@ -3,26 +3,28 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
 
-class PlannerPage extends StatefulWidget {
+class PlannerPage extends ConsumerStatefulWidget {
   const PlannerPage({super.key});
 
   @override
-  State<PlannerPage> createState() => _PlannerPageState();
+  ConsumerState<PlannerPage> createState() => _PlannerPageState();
 }
 
-class _PlannerPageState extends State<PlannerPage> {
+class _PlannerPageState extends ConsumerState<PlannerPage> {
   // =============================================================================
   // 1. STATE VARIABLES
   // =============================================================================
-
+  bool _titleTouched = false;
   // --- View & Navigation ---
   int _selectedView = 0; // 0: Personal, 1: Shared
   DateTime _selectedDate = DateTime.now();
-
+  bool _titleHasError = false;
   // --- Task Input Control ---
   final TextEditingController _taskController = TextEditingController();
-  final List<Task> _tasks = [];
 
   // --- Recurrence & Scheduling ---
   int _recurrenceMode = 0; // 0: Single, 1: Weekly, 2: Monthly, 3: X/Y Cycle
@@ -38,7 +40,7 @@ class _PlannerPageState extends State<PlannerPage> {
   int _xDays = 1; // Number of active days
   int _yDays = 1; // Number of gap days
   final DateTime _cycleStartDate = DateTime.now(); // The "Day 0" for cycle math
-
+  final ScrollController _dateController = ScrollController();
   @override
   void dispose() {
     _taskController.dispose();
@@ -47,88 +49,129 @@ class _PlannerPageState extends State<PlannerPage> {
 
   // --- 2. THE MAIN TASK MODAL (Handles both Create and Edit) ---
   // ... inside _PlannerPageState ...
-
   void _showTaskSheet(BuildContext context, {Task? existingTask}) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final userAsync = ref.watch(userRoleProvider);
 
-    // NEW COLORS: Use Slate Blue instead of deep blue for light mode
+    // Quick guard - if user is not loaded yet, don't show sheet
+    if (userAsync.isLoading || userAsync.hasError || userAsync.value == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userAsync.hasError
+                  ? 'Ошибка загрузки данных пользователя'
+                  : 'Пожалуйста, войдите в аккаунт',
+            ),
+          ),
+        );
+      });
+      return;
+    }
+
+    final currentUser = userAsync.value!; // safe - we checked above
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF0B0F1A) : const Color(0xFFF8FAFC);
-    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
     final adaptiveBlue = isDark
         ? const Color(0xFF60A5FA)
-        : const Color(0xFF475569); // Steel Blue
+        : const Color(0xFF475569);
     final textColor = isDark ? Colors.white : const Color(0xFF1E293B);
-    final subTextColor = isDark ? Colors.white38 : const Color(0xFF64748B);
-
-    // 1. INITIALIZE DATA (Crucial for Edit vs Create logic)
+    final subText = isDark ? Colors.white38 : const Color(0xFF64748B);
+    Importance localImportance = existingTask?.importance ?? Importance.low;
+    bool localIsShared = existingTask?.isShared ?? (_selectedView == 1);
+    // Initialize form state
     if (existingTask != null) {
       _taskController.text = existingTask.title;
       _recurrenceMode = existingTask.recurrenceMode;
-      _selectedReminders.clear();
-      _selectedReminders.addAll(existingTask.reminders);
-    } else {
-      _taskController.clear();
-      _recurrenceMode = 0;
-      _selectedReminders.clear();
-      _selectedReminders.add(const TimeOfDay(hour: 9, minute: 0));
+      _selectedReminders
+        ..clear()
+        ..addAll(existingTask.reminders);
+      _selectedDate = existingTask.date;
+      _selectedWeekdays
+        ..clear()
+        ..addAll(existingTask.selectedWeekdays);
+      _selectedMonthDays
+        ..clear()
+        ..addAll(existingTask.selectedMonthDays);
+      _xDays = existingTask.xDays ?? 1;
+      _yDays = existingTask.yDays ?? 1;
+      // if you actually store/use it:
+      // _cycleStartDate = existingTask.cycleStartDate ?? DateTime.now();
+
+      localImportance = existingTask.importance;
+      localIsShared = existingTask.isShared;
     }
 
-    // Local state for the sheet's toggle/chips
-    Importance localImportance = existingTask?.importance ?? Importance.low;
-    bool localIsShared = existingTask?.isShared ?? (_selectedView == 1);
+    // Local mutable state for the bottom sheet
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
-          ),
-          child: Container(
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(32),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          return ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.88,
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(32),
+                ),
               ),
-            ),
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildFixedHeader(isDark),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildFixedHeader(isDark),
+
+                  Flexible(
+                    child: SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Title
                           Text(
                             existingTask == null
                                 ? "Новая задача"
-                                : "Редактировать",
+                                : "Редактировать задачу",
                             style: GoogleFonts.inter(
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
                               color: textColor,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 20),
+
+                          // Task title field
                           TextField(
                             controller: _taskController,
-                            cursorColor: adaptiveBlue,
+                            cursorColor:
+                                adaptiveBlue, // This should work if defined above
                             style: TextStyle(color: textColor),
+                            onChanged: (_) => setSheetState(() {}),
+                            onTap: () =>
+                                setSheetState(() => _titleTouched = true),
                             decoration: _inputDecoration(
-                              "Напр: Отчет по складу",
-                              isDark,
+                              hint: 'Например: Отчет по складу',
+                              isDark: isDark,
+                              errorText:
+                                  (_titleTouched &&
+                                      _taskController.text.trim().isEmpty)
+                                  ? 'Обязательно укажите название задачи'
+                                  : null,
                             ),
+                            textCapitalization: TextCapitalization.sentences,
                           ),
                           _buildSectionDivider(isDark),
 
+                          // Task type (Personal/Shared)
                           _buildInputLabel("Тип задачи", isDark),
                           Row(
                             children: [
@@ -152,6 +195,7 @@ class _PlannerPageState extends State<PlannerPage> {
                           ),
                           _buildSectionDivider(isDark),
 
+                          // Importance
                           _buildInputLabel("Важность", isDark),
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -176,6 +220,7 @@ class _PlannerPageState extends State<PlannerPage> {
                           ),
                           _buildSectionDivider(isDark),
 
+                          // Recurrence mode
                           _buildInputLabel("Режим повторения", isDark),
                           _buildRecurrenceToggle(
                             adaptiveBlue,
@@ -184,28 +229,42 @@ class _PlannerPageState extends State<PlannerPage> {
                                 setSheetState(() => _recurrenceMode = mode),
                           ),
 
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: _buildDynamicRecurrenceContent(
-                              context,
-                              isDark,
-                              adaptiveBlue,
-                              textColor,
-                              setSheetState,
-                            ),
+                          const SizedBox(height: 12),
+
+                          // Dynamic recurrence content
+                          _buildDynamicRecurrenceContent(
+                            context,
+                            isDark,
+                            adaptiveBlue,
+                            textColor,
+                            subText,
+                            setSheetState,
                           ),
+
                           _buildSectionDivider(isDark),
 
+                          // Reminders
                           _buildInputLabel("Напоминания", isDark),
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
                               ..._selectedReminders.map(
-                                (time) => _reminderChip(
-                                  time.format(context),
-                                  adaptiveBlue,
-                                  isDark,
-                                  onDelete: () => setSheetState(
-                                    () => _selectedReminders.remove(time),
+                                (time) => GestureDetector(
+                                  onTap: () => _editExistingReminder(
+                                    context,
+                                    isDark,
+                                    adaptiveBlue,
+                                    time,
+                                    setSheetState,
+                                  ),
+                                  child: _reminderChip(
+                                    time.format(context),
+                                    adaptiveBlue,
+                                    isDark,
+                                    onDelete: () => setSheetState(
+                                      () => _selectedReminders.remove(time),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -218,7 +277,7 @@ class _PlannerPageState extends State<PlannerPage> {
                                     if (!_selectedReminders.contains(newTime)) {
                                       _selectedReminders.add(newTime);
                                       _selectedReminders.sort(
-                                        (a, b) => a.hour.compareTo(b.hour),
+                                        (a, b) => a.compareTo(b),
                                       );
                                     }
                                   });
@@ -227,116 +286,113 @@ class _PlannerPageState extends State<PlannerPage> {
                             ],
                           ),
 
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 32),
 
-                          Padding(
-                            padding: EdgeInsets.only(
-                              bottom:
-                                  MediaQuery.of(context).padding.bottom + 16,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    style: OutlinedButton.styleFrom(
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      side: BorderSide(
-                                        color: isDark
-                                            ? Colors.white10
-                                            : Colors.black12,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 14,
-                                      ),
+                          // Action buttons
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(
+                                      color: isDark
+                                          ? Colors.white10
+                                          : Colors.black12,
                                     ),
-                                    child: Text(
-                                      "Отмена",
-                                      style: GoogleFonts.inter(
-                                        color: isDark
-                                            ? Colors.white70
-                                            : Colors.black87,
-                                      ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    "Отмена",
+                                    style: GoogleFonts.inter(
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.black87,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      // FIX: Ensure 'if' statements are enclosed in a block
-                                      if (_taskController.text.trim().isEmpty) {
-                                        return;
-                                      }
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    final title = _taskController.text.trim();
+                                    setSheetState(() {
+                                      _titleHasError = title.isEmpty;
+                                    });
+                                    if (_titleHasError) {
+                                      return; // Don't save if error
+                                    }
 
-                                      // UPDATE PARENT STATE
-                                      setState(() {
-                                        final newTask = Task(
-                                          id:
-                                              existingTask?.id ??
-                                              DateTime.now().toString(),
-                                          title: _taskController.text,
-                                          date: _selectedDate,
-                                          reminders: List.from(
-                                            _selectedReminders,
-                                          ),
-                                          recurrenceMode: _recurrenceMode,
-                                          isShared: localIsShared,
-                                          importance: localImportance,
-                                          xDays: _xDays,
-                                          yDays: _yDays,
-                                          cycleStartDate: _cycleStartDate,
-                                        );
+                                    final newTask = Task(
+                                      id:
+                                          existingTask?.id ??
+                                          FirebaseFirestore.instance
+                                              .collection('tasks')
+                                              .doc()
+                                              .id,
+                                      title: title,
+                                      date: _selectedDate,
+                                      reminders: List.unmodifiable(
+                                        _selectedReminders,
+                                      ),
+                                      recurrenceMode: _recurrenceMode,
+                                      isShared: localIsShared,
+                                      importance: localImportance,
+                                      creatorName: currentUser.name,
+                                      creatorPfpUrl: currentUser.photoUrl,
+                                      selectedWeekdays: {..._selectedWeekdays},
+                                      selectedMonthDays: {
+                                        ..._selectedMonthDays,
+                                      },
+                                      xDays: _xDays,
+                                      yDays: _yDays,
+                                      cycleStartDate: _cycleStartDate,
+                                    );
 
-                                        if (existingTask != null) {
-                                          int index = _tasks.indexWhere(
-                                            (t) => t.id == existingTask.id,
-                                          );
-                                          // FIX: Wrap statement in a block to fix 'curly_braces_in_flow_control_structures'
-                                          if (index != -1) {
-                                            _tasks[index] = newTask;
-                                          }
-                                        } else {
-                                          _tasks.add(newTask);
-                                        }
-                                      });
-                                      Navigator.pop(context);
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: adaptiveBlue,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 14,
-                                      ),
-                                      elevation: 0,
+                                    _saveTaskToDatabase(newTask);
+                                    Navigator.pop(context);
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: adaptiveBlue,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
                                     ),
-                                    child: Text(
-                                      existingTask == null
-                                          ? "Создать"
-                                          : "Сохранить",
-                                      style: GoogleFonts.inter(
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: Text(
+                                    existingTask == null
+                                        ? "Создать"
+                                        : "Сохранить",
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(
+                            height: MediaQuery.of(context).padding.bottom + 16,
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -350,180 +406,214 @@ class _PlannerPageState extends State<PlannerPage> {
     Color cardBg,
     bool isDark,
   ) {
-    final filteredTasks = _tasks.where((t) {
-      // 1. Check if it's the same tab (Personal vs Shared)
-      bool sameTab = t.isShared == (_selectedView == 1);
-      if (!sameTab) return false;
+    // 1. Get real-time data from Firestore
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('tasks')
+          .orderBy('timestamp', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text("Ошибка загрузки"));
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-      // 2. Check date based on recurrence mode
-      switch (t.recurrenceMode) {
-        case 0: // Single (Разово)
-          return t.date.day == _selectedDate.day &&
-              t.date.month == _selectedDate.month &&
-              t.date.year == _selectedDate.year;
-        case 1: // Weekly (Дни недели)
-          // Note: DateTime.weekday is 1 (Mon) to 7 (Sun), your index is 0-6
-          return _selectedWeekdays.contains(_selectedDate.weekday - 1);
-        case 2: // Monthly (Даты)
-          return _selectedMonthDays.contains(_selectedDate.day);
-        case 3: // Cycle X/Y
-          return _isDateInXYCycle(
-            _selectedDate,
-            t.cycleStartDate ?? _cycleStartDate,
-            t.xDays ?? 1,
-            t.yDays ?? 1,
+        // 2. Map Firebase docs to Task objects
+        final allTasks = snapshot.data!.docs.map((doc) {
+          return Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+        }).toList();
+
+        // 3. Filter the tasks logic correctly
+        final filteredTasks = allTasks.where((t) {
+          bool sameTab = t.isShared == (_selectedView == 1);
+          if (!sameTab) return false;
+
+          // Filter by Date & Recurrence
+          switch (t.recurrenceMode) {
+            case 0: // Single
+              return t.date.day == _selectedDate.day &&
+                  t.date.month == _selectedDate.month &&
+                  t.date.year == _selectedDate.year;
+            case 1: // Weekly
+              // FIX: Check task's own weekdays, not the global state
+              return t.selectedWeekdays.contains(_selectedDate.weekday - 1);
+            case 2: // Monthly
+              // FIX: Check task's own month days
+              return t.selectedMonthDays.contains(_selectedDate.day);
+            case 3: // Cycle X/Y
+              return _isDateInXYCycle(
+                _selectedDate,
+                t.cycleStartDate ?? _selectedDate,
+                t.xDays ?? 1,
+                t.yDays ?? 1,
+              );
+            default:
+              return false;
+          }
+        }).toList();
+
+        if (filteredTasks.isEmpty) {
+          return Center(
+            child: Text(
+              "На этот день ничего не запланировано",
+              style: TextStyle(color: subText),
+            ),
           );
-        default:
-          return false;
-      }
-    }).toList();
+        }
 
-    if (filteredTasks.isEmpty) {
-      return Center(
-        child: Text("Задач на этот день нет", style: TextStyle(color: subText)),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: filteredTasks.length,
-      itemBuilder: (context, index) {
-        final task = filteredTasks[index];
-        return Slidable(
-          key: Key(task.id),
-          // Left side swipe (reveals Edit)
-          startActionPane: ActionPane(
-            motion: const DrawerMotion(),
-            extentRatio: 0.25, // Adjust width of the button
-            children: [
-              SlidableAction(
-                onPressed: (context) =>
-                    _showTaskSheet(context, existingTask: task),
-                backgroundColor: accent.withValues(alpha: 0.1),
-                foregroundColor: accent,
-                icon: Icons.edit_note_rounded,
-                label: 'Edit',
-                borderRadius: const BorderRadius.horizontal(
-                  right: Radius.circular(20),
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: filteredTasks.length,
+          itemBuilder: (context, index) {
+            final task = filteredTasks[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Slidable(
+                key: Key(task.id),
+                startActionPane: ActionPane(
+                  motion: const DrawerMotion(),
+                  extentRatio: 0.25,
+                  children: [
+                    SlidableAction(
+                      onPressed: (context) =>
+                          _showTaskSheet(context, existingTask: task),
+                      backgroundColor: accent.withValues(alpha: 0.1),
+                      foregroundColor: accent,
+                      icon: Icons.edit_note_rounded,
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(20),
+                      ),
+                    ),
+                  ],
+                ),
+                endActionPane: ActionPane(
+                  motion: const DrawerMotion(),
+                  extentRatio: 0.25,
+                  children: [
+                    SlidableAction(
+                      onPressed: (context) => _deleteTaskFromFirebase(task.id),
+                      backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
+                      foregroundColor: Colors.redAccent,
+                      icon: Icons.delete_outline_rounded,
+                      borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(20),
+                      ),
+                    ),
+                  ],
+                ),
+                child: _taskItemCard(
+                  task, // 1. Task
+                  isDark, // 2. bool
+                  text, // 3. Color
+                  subText, // 4. Color
+                  accent, // 5. Color
                 ),
               ),
-            ],
-          ),
-          // Right side swipe (reveals Delete)
-          endActionPane: ActionPane(
-            motion: const DrawerMotion(),
-            extentRatio: 0.25,
-            children: [
-              SlidableAction(
-                onPressed: (context) {
-                  setState(() {
-                    _tasks.removeWhere((t) => t.id == task.id);
-                  });
-                },
-                backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
-                foregroundColor: Colors.redAccent,
-                icon: Icons.delete_outline_rounded,
-                label: 'Delete',
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(20),
-                ),
-              ),
-            ],
-          ),
-          child: _taskItemCard(task, accent, text, subText, cardBg, isDark),
+            );
+          },
         );
       },
     );
   }
 
   // --- 4. CORE UI COMPONENTS (Cards & Chips) ---
+
   Widget _taskItemCard(
     Task task,
-    Color accent,
+    bool isDark,
     Color text,
     Color subText,
-    Color cardBg,
-    bool isDark,
+    Color accent,
   ) {
-    Color impColor = _getImportanceColor(
-      task.importance,
-      isDark,
-    ); // Pass isDark here
+    final authState = ref.watch(authProvider);
+
+    // ✅ Safely extract current user
+    final currentUser = authState;
+
+    // ✅ Define card background color
+    final cardBg = isDark ? const Color(0xFF0B0F1A) : const Color(0xFFFFFFFF);
+
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+          width: 1,
+        ),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+        ],
       ),
       child: Row(
         children: [
-          Container(
-            width: 4,
-            height: 32,
-            decoration: BoxDecoration(
-              color: impColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 12),
+          _importanceIndicator(task.importance, isDark),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Task Title with consistent font
                 Text(
                   task.title,
                   style: GoogleFonts.inter(
                     color: text,
-                    fontWeight:
-                        FontWeight.w600, // Slightly reduced bold for elegance
-                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
                   ),
                 ),
-
-                // 2. Vertical Spacing
-                const SizedBox(height: 6),
-
-                // 3. Time Row with Icon (Only show if time exists)
-                if (task.reminders.isNotEmpty)
+                if (task.reminders.isNotEmpty) ...[
+                  const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.access_time_rounded, size: 14, color: subText),
+                      Icon(Icons.alarm, size: 12, color: subText),
                       const SizedBox(width: 4),
                       Text(
                         task.reminders.first.format(context),
-                        style: GoogleFonts.inter(
-                          // FIX: Matches title font
-                          color: subText,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: GoogleFonts.inter(color: subText, fontSize: 12),
                       ),
                     ],
-                  )
-                else
-                  // Optional: Placeholder or nothing if no time
-                  Text(
-                    "--:--",
-                    style: GoogleFonts.inter(
-                      color: subText.withValues(alpha: 0.5),
-                      fontSize: 12,
-                    ),
                   ),
+                ],
               ],
             ),
           ),
-
-          // 4. Shared/Personal Indicator Icon
-          Padding(
-            padding: const EdgeInsets.only(left: 8.0),
-            child: Icon(
-              task.isShared ? Icons.group_outlined : Icons.person_outline,
-              size: 20,
-              color: subText.withValues(alpha: 0.4),
+          if (task.isShared)
+            Column(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: accent.withValues(alpha: 0.1),
+                  backgroundImage:
+                      (task.creatorPfpUrl != null &&
+                          task.creatorPfpUrl!.isNotEmpty)
+                      ? NetworkImage(task.creatorPfpUrl!)
+                      : null,
+                  child:
+                      (task.creatorPfpUrl == null ||
+                          task.creatorPfpUrl!.isEmpty)
+                      ? Text(
+                          task.creatorName == (currentUser.name)
+                              ? "В"
+                              : task.creatorName[0],
+                          style: TextStyle(color: accent, fontSize: 12),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  task.creatorName == (currentUser.name)
+                      ? "Вы"
+                      : task.creatorName,
+                  style: GoogleFonts.inter(color: subText, fontSize: 10),
+                ),
+              ],
             ),
-          ),
         ],
       ),
     );
@@ -550,7 +640,7 @@ class _PlannerPageState extends State<PlannerPage> {
     final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
     final adaptiveBlue = isDark
         ? const Color(0xFF60A5FA)
-        : const Color(0xFF1E3A8A);
+        : const Color(0xFF475569);
     final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
     final subTextColor = isDark ? Colors.white38 : const Color(0xFF64748B);
 
@@ -598,114 +688,160 @@ class _PlannerPageState extends State<PlannerPage> {
     Color text,
     Color subText,
   ) {
-    return SizedBox(
-      height: 100,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: 365, // Allows scrolling through a full year
-        itemBuilder: (context, index) {
-          DateTime date = DateTime.now().add(Duration(days: index));
-
-          // Exact comparison to ensure only one specific day is selected
-          bool isSelected =
-              date.day == _selectedDate.day &&
-              date.month == _selectedDate.month &&
-              date.year == _selectedDate.year;
-
-          String dayName = DateFormat('E', 'ru_RU').format(date).toUpperCase();
-          String monthName = DateFormat('MMM', 'ru_RU')
-              .format(date)
-              .replaceAll('.', '')
-              .trim() // ADD THIS to remove hidden spaces
-              .toUpperCase();
-
-          return GestureDetector(
-            onTap: () => setState(() => _selectedDate = date),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              width: 60, // Slightly narrower for a tighter fit
-              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? accent
-                    : (isDark
-                          ? Colors.white.withValues(alpha: 0.03)
-                          : Colors.white),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  width: isSelected ? 2 : 1,
-                  color: isSelected
-                      ? accent
-                      : (isDark
-                            ? Colors.white10
-                            : Colors.black.withValues(alpha: 0.05)),
-                ),
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: accent.withValues(alpha: 0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ]
-                    : (!isDark
-                          ? [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.03),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ]
-                          : []),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Fixed: More meaningful header layout
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    monthName.trim(),
-                    style: TextStyle(
-                      color: isSelected
-                          ? (isDark
-                                ? Colors.black.withValues(alpha: 0.6)
-                                : Colors.white.withValues(alpha: 0.8))
-                          : subText,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
+                    "Ваше расписание",
+                    style: GoogleFonts.inter(
+                      color: subText,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 4), // Added space
                   Text(
-                    "${date.day}",
-                    style: TextStyle(
-                      color: isSelected
-                          ? (isDark ? Colors.black : Colors.white)
-                          : text,
-                      fontSize: 22,
+                    DateFormat(
+                      'LLLL yyyy',
+                      'ru_RU',
+                    ).format(_selectedDate).toUpperCase(),
+                    style: GoogleFonts.inter(
+                      color: text,
                       fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 2), // Added space
-                  Text(
-                    dayName,
-                    style: TextStyle(
-                      color: isSelected
-                          ? (isDark
-                                ? Colors.black.withValues(alpha: 0.6)
-                                : Colors.white.withValues(alpha: 0.8))
-                          : subText,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      letterSpacing: 1.1,
                     ),
                   ),
                 ],
               ),
-            ),
-          );
-        },
-      ),
+              GestureDetector(
+                onTap: () {
+                  _dateController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOutCubic,
+                  );
+                  setState(() => _selectedDate = DateTime.now());
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "Сегодня",
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 100,
+          child: ListView.builder(
+            controller: _dateController,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: 365,
+            itemBuilder: (context, index) {
+              DateTime date = DateTime.now().add(Duration(days: index));
+
+              // 1. USE 'isSelected' to fix the warning
+              bool isSelected = DateUtils.isSameDay(date, _selectedDate);
+
+              String dayName = DateFormat(
+                'E',
+                'ru_RU',
+              ).format(date).toUpperCase();
+              String monthName = DateFormat(
+                'MMM',
+                'ru_RU',
+              ).format(date).replaceAll('.', '').trim().toUpperCase();
+
+              // 2. RETURN the widget to fix the 'nullable return' error
+              return GestureDetector(
+                onTap: () => setState(() => _selectedDate = date),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  width: 60,
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? accent
+                        : (isDark
+                              ? Colors.white.withValues(alpha: 0.03)
+                              : Colors.white),
+                    borderRadius: BorderRadius.circular(20),
+                    // Apply common border style here
+                    border: Border.all(
+                      width: isSelected ? 2 : 1,
+                      color: isSelected
+                          ? accent
+                          : (isDark
+                                ? Colors.white10
+                                : Colors.black.withValues(alpha: 0.05)),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        monthName,
+                        style: TextStyle(
+                          color: isSelected
+                              ? (isDark ? Colors.black : Colors.white)
+                              : subText,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        "${date.day}",
+                        style: TextStyle(
+                          color: isSelected
+                              ? (isDark ? Colors.black : Colors.white)
+                              : text,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        dayName,
+                        style: TextStyle(
+                          color: isSelected
+                              ? (isDark ? Colors.black : Colors.white)
+                              : subText,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -723,12 +859,11 @@ class _PlannerPageState extends State<PlannerPage> {
         decoration: BoxDecoration(
           color: isDark ? cardColor : Colors.black.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(18),
+          border: _commonBorder(isDark), // Added this line
         ),
         child: Row(
           children: [
-            // Index 0: Personal (Left)
             _toggleItem("Личные", 0, accent, isDark),
-            // Index 1: Shared (Right)
             _toggleItem("Общие", 1, accent, isDark),
           ],
         ),
@@ -814,27 +949,29 @@ class _PlannerPageState extends State<PlannerPage> {
   }
 
   /// Standard decoration for text input fields in the planner.
-  InputDecoration _inputDecoration(String hint, bool isDark) {
+  InputDecoration _inputDecoration({
+    required String hint,
+    required bool isDark,
+    String? errorText,
+  }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.2)
-            : Colors.black.withValues(alpha: 0.2),
-        fontSize: 14,
-      ),
-      filled: true,
-      fillColor: isDark
-          ? Colors.white.withValues(alpha: 0.05)
-          : Colors.black.withValues(alpha: 0.03),
+      hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
+      errorText: errorText,
+      errorStyle: const TextStyle(color: Colors.redAccent),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: isDark ? Colors.white10 : Colors.black12),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(
+          color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF475569),
+        ), // Use adaptiveBlue here too for consistency
+      ),
+      // Add fillColor or other styles if needed
     );
   }
-
   // =============================================================================
   // SECTION 4: RECURRENCE & SELECTION LOGIC
   // =============================================================================
@@ -958,129 +1095,149 @@ class _PlannerPageState extends State<PlannerPage> {
     BuildContext context,
     bool isDark,
     Color accent,
-    Function(TimeOfDay) onTimeSelected,
+    ValueChanged<TimeOfDay> onTimeSelected,
   ) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () {
-        TimeOfDay pickedTime = const TimeOfDay(hour: 9, minute: 0);
+      onTap: () async {
+        final now = DateTime.now();
+        // Nice UX: start from current time rounded to nearest 5 minutes
+        final initialTime = TimeOfDay(
+          hour: now.hour,
+          minute: (now.minute / 5).round() * 5,
+        );
 
-        // Using showModalBottomSheet instead of showCupertinoModalPopup
-        // to support the 'enableDrag' and 'isScrollControlled' features
-        // seen in your main task page.
-        showModalBottomSheet(
+        TimeOfDay? selectedTime = await showModalBottomSheet<TimeOfDay>(
           context: context,
           isScrollControlled: true,
-          enableDrag: true, // Enables dragging down from the handle or content
           backgroundColor: Colors.transparent,
-          builder: (context) => Container(
-            height: 350 + MediaQuery.of(context).padding.bottom,
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1F2937) : Colors.white,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(32),
-              ),
-            ),
-            child: Column(
-              children: [
-                // 1. THE DRAG HANDLE
-                // Moving it here and making it part of the column allows it
-                // to act as a physical "grab" point for the modal.
-                const SizedBox(height: 12),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white24 : Colors.black12,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+          builder: (context) {
+            TimeOfDay tempTime = initialTime; // local mutable copy
 
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 2,
-                    vertical: 2,
+            return Container(
+              height: 340 + MediaQuery.of(context).padding.bottom,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1F2937) : Colors.white,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(32),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Drag handle
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12, bottom: 8),
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      CupertinoButton(
-                        child: Text(
-                          "Отмена",
+
+                  // Header with Cancel / Done
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            'Отмена',
+                            style: GoogleFonts.inter(
+                              color: isDark ? Colors.white70 : Colors.black54,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'Время напоминания',
                           style: GoogleFonts.inter(
-                            color: isDark ? Colors.white54 : Colors.black54,
+                            color: isDark ? Colors.white : Colors.black87,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context, tempTime);
+                          },
+                          child: Text(
+                            'Готово',
+                            style: GoogleFonts.inter(
+                              color: accent,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const Divider(height: 1),
+
+                  // Time picker
+                  Expanded(
+                    child: CupertinoTheme(
+                      data: CupertinoThemeData(
+                        brightness: isDark ? Brightness.dark : Brightness.light,
+                        textTheme: CupertinoTextThemeData(
+                          dateTimePickerTextStyle: GoogleFonts.inter(
+                            fontSize: 26,
                             fontWeight: FontWeight.w500,
+                            color: isDark ? Colors.white : Colors.black87,
                           ),
                         ),
-                        onPressed: () => Navigator.pop(context),
                       ),
-                      Text(
-                        "Время",
-                        style: GoogleFonts.inter(
-                          color: isDark ? Colors.white : Colors.black,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 17,
-                          decoration: TextDecoration.none,
+                      child: CupertinoDatePicker(
+                        mode: CupertinoDatePickerMode.time,
+                        use24hFormat: true,
+                        initialDateTime: DateTime(
+                          2000,
+                          1,
+                          1,
+                          initialTime.hour,
+                          initialTime.minute,
                         ),
-                      ),
-                      CupertinoButton(
-                        child: Text(
-                          "Готово",
-                          style: GoogleFonts.inter(
-                            color: accent, // Your dynamic Importance color
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        onPressed: () {
-                          onTimeSelected(pickedTime);
-                          Navigator.pop(context);
+                        minuteInterval: 5, // nicer UX: steps of 5 min
+                        onDateTimeChanged: (DateTime dt) {
+                          tempTime = TimeOfDay(
+                            hour: dt.hour,
+                            minute: dt.minute,
+                          );
                         },
                       ),
-                    ],
+                    ),
                   ),
-                ),
-                const Divider(height: 1),
 
-                // 2. THE PICKER
-                Expanded(
-                  child: CupertinoTheme(
-                    data: CupertinoThemeData(
-                      brightness: isDark ? Brightness.dark : Brightness.light,
-                      textTheme: CupertinoTextThemeData(
-                        dateTimePickerTextStyle: GoogleFonts.inter(
-                          color: isDark ? Colors.white : Colors.black,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    child: CupertinoDatePicker(
-                      mode: CupertinoDatePickerMode.time,
-                      use24hFormat: true,
-                      initialDateTime: DateTime(2024, 1, 1, 9, 0),
-                      onDateTimeChanged: (DateTime newDate) {
-                        pickedTime = TimeOfDay(
-                          hour: newDate.hour,
-                          minute: newDate.minute,
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                // Bottom Safe Area padding
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 10),
-              ],
-            ),
-          ),
+                  // Extra bottom padding
+                  SizedBox(height: MediaQuery.of(context).padding.bottom),
+                ],
+              ),
+            );
+          },
         );
+
+        if (selectedTime != null) {
+          // Optional: small haptic feedback (iOS/Android)
+          // HapticFeedback.lightImpact(); // uncomment if you want
+
+          onTimeSelected(selectedTime);
+        }
       },
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: accent.withValues(alpha: 0.1),
+          color: accent.withValues(alpha: 0.12),
           shape: BoxShape.circle,
         ),
-        child: Icon(Icons.add, color: accent, size: 20),
+        child: Icon(Icons.add_rounded, color: accent, size: 22),
       ),
     );
   }
@@ -1139,19 +1296,19 @@ class _PlannerPageState extends State<PlannerPage> {
     switch (imp) {
       case Importance.low:
         label = "Низкая";
-        impColor = Colors.grey;
+        impColor = Colors.grey.shade500; // Neutral Grey
         break;
       case Importance.medium:
         label = "Средняя";
-        impColor = const Color(0xFFF59E0B);
+        impColor = const Color(0xFFFFC107); // Pure Amber (Bright/Light)
         break;
       case Importance.high:
         label = "Высокая";
-        impColor = Colors.orange;
+        impColor = const Color(0xFFE65100); // Burnt Orange (Dark/Deep)
         break;
       case Importance.critical:
         label = "Крит.";
-        impColor = Colors.red;
+        impColor = const Color(0xFFB71C1C); // Deep Blood Red (Very Dark)
         break;
     }
 
@@ -1193,6 +1350,7 @@ class _PlannerPageState extends State<PlannerPage> {
     bool isDark,
     Color blue,
     Color text,
+    Color subText, // Add this line
     StateSetter setSheetState,
   ) {
     if (_recurrenceMode == 0) {
@@ -1204,8 +1362,35 @@ class _PlannerPageState extends State<PlannerPage> {
             initialDate: _selectedDate,
             firstDate: DateTime(2020),
             lastDate: DateTime(2050),
+            // FIX: Removes purple color and applies your adaptive blue
+            builder: (context, child) {
+              return Theme(
+                data: Theme.of(context).copyWith(
+                  colorScheme: isDark
+                      ? ColorScheme.dark(
+                          primary: blue, // Your adaptive blue
+                          onPrimary: Colors.black,
+                          surface: const Color(0xFF1F2937),
+                          onSurface: Colors.white,
+                        )
+                      : ColorScheme.light(
+                          primary: blue,
+                          onPrimary: Colors.white,
+                          surface: Colors.white,
+                          onSurface: Colors.black,
+                        ),
+                  textButtonTheme: TextButtonThemeData(
+                    style: TextButton.styleFrom(foregroundColor: blue),
+                  ),
+                ),
+                child: child!,
+              );
+            },
           );
-          if (picked != null) setSheetState(() => _selectedDate = picked);
+          // Use the local setSheetState to update the modal UI immediately
+          if (picked != null) {
+            setSheetState(() => _selectedDate = picked);
+          }
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1214,6 +1399,11 @@ class _PlannerPageState extends State<PlannerPage> {
                 ? Colors.white.withValues(alpha: 0.05)
                 : Colors.black.withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white10
+                  : Colors.black.withValues(alpha: 0.05),
+            ),
           ),
           child: Row(
             children: [
@@ -1221,7 +1411,18 @@ class _PlannerPageState extends State<PlannerPage> {
               const SizedBox(width: 12),
               Text(
                 DateFormat('d MMMM, yyyy', 'ru_RU').format(_selectedDate),
-                style: TextStyle(color: text, fontWeight: FontWeight.w600),
+                style: GoogleFonts.inter(
+                  // Using consistent font
+                  color: text,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: subText.withValues(alpha: 0.3),
               ),
             ],
           ),
@@ -1232,7 +1433,6 @@ class _PlannerPageState extends State<PlannerPage> {
     } else if (_recurrenceMode == 2) {
       return _buildMonthDayPicker(blue, isDark, setSheetState);
     } else {
-      // FIX: Pass the state setter and blue color
       return _buildXYCycleInput(blue, isDark, setSheetState);
     }
   }
@@ -1283,22 +1483,21 @@ class _PlannerPageState extends State<PlannerPage> {
               }),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
+                width: 42, // Match this to the weekday circle size
+                height: 42,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: isSelected
                       ? adaptiveBlue
                       : (isDark
                             ? Colors.white10
-                            : Colors.black12.withValues(alpha: 0.03)),
+                            : Colors.black.withValues(alpha: 0.03)),
                   shape: BoxShape.circle,
                 ),
                 child: Text(
                   "$day",
                   style: GoogleFonts.inter(
-                    color: isSelected
-                        ? Colors.white
-                        : (isDark ? Colors.white70 : Colors.black87),
-                    fontSize: 13,
+                    fontSize: 13, // Standardized
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   ),
                 ),
@@ -1349,10 +1548,7 @@ class _PlannerPageState extends State<PlannerPage> {
               child: Text(
                 days[index],
                 style: GoogleFonts.inter(
-                  color: isSelected
-                      ? Colors.white
-                      : (isDark ? Colors.white70 : Colors.black87),
-                  fontSize: 12,
+                  fontSize: 10, // Standardized
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                 ),
               ),
@@ -1420,7 +1616,7 @@ class _PlannerPageState extends State<PlannerPage> {
           cursorColor: blue, // FIX: Carrot is now blue
           onChanged: (s) => onChanged(int.tryParse(s) ?? 1),
           style: TextStyle(color: isDark ? Colors.white : Colors.black),
-          decoration: _inputDecoration("$value", isDark),
+          decoration: _inputDecoration(hint: "$value", isDark: isDark),
         ),
       ],
     );
@@ -1452,6 +1648,74 @@ class _PlannerPageState extends State<PlannerPage> {
     // Example: If X=3, Y=2. Days 0,1,2 are active. Day 3,4 are break.
     return dayInCycle < x;
   }
+
+  // Little helper to reduce redundance
+  Border _commonBorder(bool isDark) => Border.all(
+    color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+    width: 1,
+  );
+  // Edit reminder helper
+  void _editExistingReminder(
+    BuildContext context,
+    bool isDark,
+    Color accent,
+    TimeOfDay oldTime,
+    StateSetter setSheetState,
+  ) {
+    // We reuse the logic from _addReminderButton to show the time picker
+    _addReminderButton(context, isDark, accent, (newTime) {
+      setSheetState(() {
+        int index = _selectedReminders.indexOf(oldTime);
+        if (index != -1) {
+          // Update the time and re-sort to keep them in order
+          _selectedReminders[index] = newTime;
+          _selectedReminders.sort((a, b) {
+            final minutesA = a.hour * 60 + a.minute;
+            final minutesB = b.hour * 60 + b.minute;
+            return minutesA.compareTo(minutesB);
+          });
+        }
+      });
+    });
+  }
+
+  // sdfds
+  Widget _importanceIndicator(Importance importance, bool isDark) {
+    return Container(
+      width: 4,
+      height: 32,
+      decoration: BoxDecoration(
+        color: _getImportanceColor(importance, isDark),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+
+  void _saveTaskToDatabase(Task task) {
+    FirebaseFirestore.instance.collection('tasks').doc(task.id).set({
+      'title': task.title,
+      'date': task.date.toIso8601String(),
+      'reminders': task.reminders
+          .map((r) => {'h': r.hour, 'm': r.minute})
+          .toList(),
+      'isShared': task.isShared,
+      'creatorName': task.creatorName,
+      'creatorPfpUrl': task.creatorPfpUrl,
+      'importance': task.importance.index,
+      'recurrenceMode': task.recurrenceMode,
+      'selectedWeekdays': task.selectedWeekdays.toList(), // Add this
+      'selectedMonthDays': task.selectedMonthDays.toList(), // Add this
+      'timestamp': FieldValue.serverTimestamp(),
+      'xDays': task.xDays,
+      'yDays': task.yDays,
+      'cycleStartDate': task.cycleStartDate?.toIso8601String(),
+    });
+  }
+
+  // sldf
+  void _deleteTaskFromFirebase(String id) {
+    FirebaseFirestore.instance.collection('tasks').doc(id).delete();
+  }
 }
 
 enum Importance { low, medium, high, critical }
@@ -1464,8 +1728,10 @@ class Task {
   final int recurrenceMode;
   final bool isShared;
   final Importance importance;
-
-  // Data for Cycle X/Y
+  final String creatorName;
+  final String? creatorPfpUrl;
+  final Set<int> selectedWeekdays;
+  final Set<int> selectedMonthDays;
   final int? xDays;
   final int? yDays;
   final DateTime? cycleStartDate;
@@ -1478,8 +1744,36 @@ class Task {
     required this.recurrenceMode,
     required this.isShared,
     required this.importance,
+    required this.creatorName,
+    this.creatorPfpUrl,
+    this.selectedWeekdays = const {},
+    this.selectedMonthDays = const {},
     this.xDays,
     this.yDays,
     this.cycleStartDate,
   });
+
+  // This fixes the 'fromMap' error
+  factory Task.fromMap(Map<String, dynamic> map, String documentId) {
+    return Task(
+      id: documentId,
+      title: map['title'] ?? '',
+      date: map['date'] != null ? DateTime.parse(map['date']) : DateTime.now(),
+      reminders: (map['reminders'] as List? ?? []).map((r) {
+        return TimeOfDay(hour: r['h'] ?? 0, minute: r['m'] ?? 0);
+      }).toList(),
+      recurrenceMode: map['recurrenceMode'] ?? 0,
+      isShared: map['isShared'] ?? false,
+      importance: Importance.values[map['importance'] ?? 0],
+      creatorName: map['creatorName'] ?? 'Manager',
+      creatorPfpUrl: map['creatorPfpUrl'],
+      selectedWeekdays: Set<int>.from(map['selectedWeekdays'] ?? {}),
+      selectedMonthDays: Set<int>.from(map['selectedMonthDays'] ?? {}),
+      xDays: map['xDays'],
+      yDays: map['yDays'],
+      cycleStartDate: map['cycleStartDate'] != null
+          ? DateTime.parse(map['cycleStartDate'])
+          : null,
+    );
+  }
 }
