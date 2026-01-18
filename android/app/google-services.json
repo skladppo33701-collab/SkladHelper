@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "437534842036",
+    "project_id": "skladhelper-33701-da5a6",
+    "storage_bucket": "skladhelper-33701-da5a6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:437534842036:android:810bfb7c86f318ae3d0be1",
+        "android_client_info": {
+          "package_name": "kz.arystan.sklad_helper_33701"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBafo3zY0dJPp5J6XCKa-Gm4o2d2muWIok"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
