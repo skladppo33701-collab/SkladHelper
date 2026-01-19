@@ -6,6 +6,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
+import 'package:sklad_helper_33701/core/theme.dart';
 
 class PlannerPage extends ConsumerStatefulWidget {
   const PlannerPage({super.key});
@@ -22,7 +23,6 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
   // --- View & Navigation ---
   int _selectedView = 0; // 0: Personal, 1: Shared
   DateTime _selectedDate = DateTime.now();
-  bool _titleHasError = false;
   // --- Task Input Control ---
   final TextEditingController _taskController = TextEditingController();
 
@@ -41,6 +41,8 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
   int _yDays = 1; // Number of gap days
   final DateTime _cycleStartDate = DateTime.now(); // The "Day 0" for cycle math
   final ScrollController _dateController = ScrollController();
+  bool isSaving = false;
+
   @override
   void dispose() {
     _taskController.dispose();
@@ -48,39 +50,19 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
   }
 
   // --- 2. THE MAIN TASK MODAL (Handles both Create and Edit) ---
-  // ... inside _PlannerPageState ...
   void _showTaskSheet(BuildContext context, {Task? existingTask}) {
     final userAsync = ref.watch(userRoleProvider);
 
-    // Quick guard - if user is not loaded yet, don't show sheet
     if (userAsync.isLoading || userAsync.hasError || userAsync.value == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              userAsync.hasError
-                  ? 'Ошибка загрузки данных пользователя'
-                  : 'Пожалуйста, войдите в аккаунт',
-            ),
-          ),
-        );
-      });
       return;
     }
 
-    final currentUser = userAsync.value!; // safe - we checked above
+    final currentUser = userAsync.value!;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0B0F1A) : const Color(0xFFF8FAFC);
-    final adaptiveBlue = isDark
-        ? const Color(0xFF60A5FA)
-        : const Color(0xFF475569);
-    final textColor = isDark ? Colors.white : const Color(0xFF1E293B);
-    final subText = isDark ? Colors.white38 : const Color(0xFF64748B);
+    // Logic variables
     Importance localImportance = existingTask?.importance ?? Importance.low;
     bool localIsShared = existingTask?.isShared ?? (_selectedView == 1);
-    // Initialize form state
+
     if (existingTask != null) {
       _taskController.text = existingTask.title;
       _recurrenceMode = existingTask.recurrenceMode;
@@ -96,14 +78,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
         ..addAll(existingTask.selectedMonthDays);
       _xDays = existingTask.xDays ?? 1;
       _yDays = existingTask.yDays ?? 1;
-      // if you actually store/use it:
-      // _cycleStartDate = existingTask.cycleStartDate ?? DateTime.now();
-
-      localImportance = existingTask.importance;
-      localIsShared = existingTask.isShared;
     }
-
-    // Local mutable state for the bottom sheet
 
     showModalBottomSheet(
       context: context,
@@ -111,13 +86,24 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
       backgroundColor: Colors.transparent,
       builder: (_) => StatefulBuilder(
         builder: (context, setSheetState) {
+          // --- DEFINITIONS INSIDE BUILDER (Fixes 'Undefined name' errors) ---
+          final theme = Theme.of(context);
+          final isDark = theme.brightness == Brightness.dark;
+          final proColors = theme.extension<SkladColors>()!;
+          final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+          final subText = isDark
+              ? Colors.white.withValues(alpha: 0.38)
+              : const Color(0xFF64748B);
+          // ------------------------------------------------------------------
+
           return ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.88,
             ),
             child: Container(
               decoration: BoxDecoration(
-                color: bgColor,
+                // FIX: Use theme color instead of undefined 'bgColor'
+                color: theme.scaffoldBackgroundColor,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(32),
                 ),
@@ -129,14 +115,12 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildFixedHeader(isDark),
-
                   Flexible(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Title
                           Text(
                             existingTask == null
                                 ? "Новая задача"
@@ -144,16 +128,14 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                             style: GoogleFonts.inter(
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
-                              color: textColor,
+                              color:
+                                  textColor, // Uses the variable defined above
                             ),
                           ),
                           const SizedBox(height: 20),
-
-                          // Task title field
                           TextField(
                             controller: _taskController,
-                            cursorColor:
-                                adaptiveBlue, // This should work if defined above
+                            cursorColor: proColors.accentAction,
                             style: TextStyle(color: textColor),
                             onChanged: (_) => setSheetState(() {}),
                             onTap: () =>
@@ -171,14 +153,13 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                           ),
                           _buildSectionDivider(isDark),
 
-                          // Task type (Personal/Shared)
                           _buildInputLabel("Тип задачи", isDark),
                           Row(
                             children: [
                               _typeChip(
                                 "Личная",
                                 !localIsShared,
-                                adaptiveBlue,
+                                proColors.accentAction,
                                 isDark,
                                 () =>
                                     setSheetState(() => localIsShared = false),
@@ -187,7 +168,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                               _typeChip(
                                 "Общая",
                                 localIsShared,
-                                adaptiveBlue,
+                                proColors.accentAction,
                                 isDark,
                                 () => setSheetState(() => localIsShared = true),
                               ),
@@ -195,7 +176,6 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                           ),
                           _buildSectionDivider(isDark),
 
-                          // Importance
                           _buildInputLabel("Важность", isDark),
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -207,7 +187,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                                       child: _importanceChip(
                                         imp,
                                         localImportance == imp,
-                                        adaptiveBlue,
+                                        proColors.accentAction,
                                         isDark,
                                         () => setSheetState(
                                           () => localImportance = imp,
@@ -220,10 +200,9 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                           ),
                           _buildSectionDivider(isDark),
 
-                          // Recurrence mode
                           _buildInputLabel("Режим повторения", isDark),
                           _buildRecurrenceToggle(
-                            adaptiveBlue,
+                            proColors.accentAction,
                             isDark,
                             (mode) =>
                                 setSheetState(() => _recurrenceMode = mode),
@@ -231,11 +210,10 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
 
                           const SizedBox(height: 12),
 
-                          // Dynamic recurrence content
                           _buildDynamicRecurrenceContent(
                             context,
                             isDark,
-                            adaptiveBlue,
+                            proColors.accentAction,
                             textColor,
                             subText,
                             setSheetState,
@@ -243,7 +221,6 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
 
                           _buildSectionDivider(isDark),
 
-                          // Reminders
                           _buildInputLabel("Напоминания", isDark),
                           Wrap(
                             spacing: 8,
@@ -254,13 +231,13 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                                   onTap: () => _editExistingReminder(
                                     context,
                                     isDark,
-                                    adaptiveBlue,
+                                    proColors.accentAction,
                                     time,
                                     setSheetState,
                                   ),
                                   child: _reminderChip(
                                     time.format(context),
-                                    adaptiveBlue,
+                                    proColors.accentAction,
                                     isDark,
                                     onDelete: () => setSheetState(
                                       () => _selectedReminders.remove(time),
@@ -271,24 +248,25 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                               _addReminderButton(
                                 context,
                                 isDark,
-                                adaptiveBlue,
+                                proColors.accentAction,
                                 (newTime) {
                                   setSheetState(() {
                                     if (!_selectedReminders.contains(newTime)) {
                                       _selectedReminders.add(newTime);
-                                      _selectedReminders.sort(
-                                        (a, b) => a.compareTo(b),
-                                      );
+                                      _selectedReminders.sort((a, b) {
+                                        final ma = a.hour * 60 + a.minute;
+                                        final mb = b.hour * 60 + b.minute;
+                                        return ma.compareTo(mb);
+                                      });
                                     }
                                   });
                                 },
                               ),
                             ],
                           ),
-
                           const SizedBox(height: 32),
 
-                          // Action buttons
+                          // --- SAVE BUTTON LOGIC (Fixed) ---
                           Row(
                             children: [
                               Expanded(
@@ -320,46 +298,76 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: ElevatedButton(
-                                  onPressed: () {
-                                    final title = _taskController.text.trim();
-                                    setSheetState(() {
-                                      _titleHasError = title.isEmpty;
-                                    });
-                                    if (_titleHasError) {
-                                      return; // Don't save if error
-                                    }
+                                  onPressed: isSaving
+                                      ? null
+                                      : () async {
+                                          final title = _taskController.text
+                                              .trim();
+                                          if (title.isEmpty) {
+                                            setSheetState(
+                                              () => _titleTouched = true,
+                                            );
+                                            return;
+                                          }
 
-                                    final newTask = Task(
-                                      id:
-                                          existingTask?.id ??
-                                          FirebaseFirestore.instance
-                                              .collection('tasks')
-                                              .doc()
-                                              .id,
-                                      title: title,
-                                      date: _selectedDate,
-                                      reminders: List.unmodifiable(
-                                        _selectedReminders,
-                                      ),
-                                      recurrenceMode: _recurrenceMode,
-                                      isShared: localIsShared,
-                                      importance: localImportance,
-                                      creatorName: currentUser.name,
-                                      creatorPfpUrl: currentUser.photoUrl,
-                                      selectedWeekdays: {..._selectedWeekdays},
-                                      selectedMonthDays: {
-                                        ..._selectedMonthDays,
-                                      },
-                                      xDays: _xDays,
-                                      yDays: _yDays,
-                                      cycleStartDate: _cycleStartDate,
-                                    );
+                                          setSheetState(() => isSaving = true);
+                                          try {
+                                            final newTask = Task(
+                                              id:
+                                                  existingTask?.id ??
+                                                  FirebaseFirestore.instance
+                                                      .collection('tasks')
+                                                      .doc()
+                                                      .id,
+                                              title: title,
+                                              date: _selectedDate,
+                                              reminders: List.unmodifiable(
+                                                _selectedReminders,
+                                              ),
+                                              recurrenceMode: _recurrenceMode,
+                                              isShared: localIsShared,
+                                              importance: localImportance,
+                                              creatorName: currentUser.name,
+                                              creatorPfpUrl:
+                                                  currentUser.photoUrl,
+                                              selectedWeekdays: {
+                                                ..._selectedWeekdays,
+                                              },
+                                              selectedMonthDays: {
+                                                ..._selectedMonthDays,
+                                              },
+                                              xDays: _xDays,
+                                              yDays: _yDays,
+                                              cycleStartDate: _cycleStartDate,
+                                            );
 
-                                    _saveTaskToDatabase(newTask);
-                                    Navigator.pop(context);
-                                  },
+                                            await _saveTaskToDatabase(newTask);
+
+                                            if (!context.mounted) return;
+                                            Navigator.pop(context);
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  "Задача сохранена",
+                                                ),
+                                              ),
+                                            );
+                                          } catch (e) {
+                                            if (context.mounted) {
+                                              _showError("Ошибка: $e");
+                                            }
+                                          } finally {
+                                            if (mounted) {
+                                              setSheetState(
+                                                () => isSaving = false,
+                                              );
+                                            }
+                                          }
+                                        },
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: adaptiveBlue,
+                                    backgroundColor: proColors.accentAction,
                                     foregroundColor: Colors.white,
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 14,
@@ -369,14 +377,23 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                                     ),
                                     elevation: 0,
                                   ),
-                                  child: Text(
-                                    existingTask == null
-                                        ? "Создать"
-                                        : "Сохранить",
-                                    style: GoogleFonts.inter(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                  child: isSaving
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : Text(
+                                          existingTask == null
+                                              ? "Создать"
+                                              : "Сохранить",
+                                          style: GoogleFonts.inter(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ],
@@ -405,6 +422,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
     Color subText,
     Color cardBg,
     bool isDark,
+    SkladColors proColors, // Added parameter
   ) {
     // 1. Get real-time data from Firestore
     return StreamBuilder<QuerySnapshot>(
@@ -502,11 +520,12 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                   ],
                 ),
                 child: _taskItemCard(
-                  task, // 1. Task
-                  isDark, // 2. bool
-                  text, // 3. Color
-                  subText, // 4. Color
-                  accent, // 5. Color
+                  task,
+                  isDark,
+                  text,
+                  subText,
+                  accent,
+                  proColors, // ADD THIS: Pass the theme extension here
                 ),
               ),
             );
@@ -518,28 +537,31 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
 
   // --- 4. CORE UI COMPONENTS (Cards & Chips) ---
 
+  // Change the definition to accept SkladColors
   Widget _taskItemCard(
     Task task,
     bool isDark,
     Color text,
     Color subText,
     Color accent,
+    SkladColors proColors, // ADD THIS: New parameter
   ) {
     final authState = ref.watch(authProvider);
-
-    // ✅ Safely extract current user
     final currentUser = authState;
 
-    // ✅ Define card background color
-    final cardBg = isDark ? const Color(0xFF0B0F1A) : const Color(0xFFFFFFFF);
+    // Use the theme extension instead of hardcoded hexes
+    final cardBg = proColors.surfaceHigh;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
+        // REMOVE 'const' here
         color: cardBg,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.05),
           width: 1,
         ),
         boxShadow: [
@@ -553,7 +575,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
       ),
       child: Row(
         children: [
-          _importanceIndicator(task.importance, isDark),
+          _importanceIndicator(task.importance, isDark, proColors),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -619,60 +641,86 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
     );
   }
 
-  Color _getImportanceColor(Importance imp, bool isDark) {
+  Color _getImportanceColor(Importance imp, SkladColors proColors) {
     switch (imp) {
       case Importance.low:
-        return isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+        return Colors.grey.shade500;
       case Importance.medium:
-        return const Color(0xFFF59E0B); // Amber/Gold
+        return proColors.warning;
       case Importance.high:
-        return const Color(0xFFEA580C); // Orange
+        return proColors.error.withValues(alpha: 0.7);
       case Importance.critical:
-        return Colors.redAccent;
+        return proColors.error;
     }
   }
 
   // --- 5. PAGE BUILD METHOD ---
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0B0F1A) : const Color(0xFFF8FAFC);
-    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
-    final adaptiveBlue = isDark
-        ? const Color(0xFF60A5FA)
-        : const Color(0xFF475569);
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subTextColor = isDark ? Colors.white38 : const Color(0xFF64748B);
+    final userAsync = ref.watch(userRoleProvider);
 
-    return Scaffold(
-      backgroundColor: bgColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 16),
-            _buildDateTimeline(isDark, adaptiveBlue, textColor, subTextColor),
-            _buildCategoryToggle(adaptiveBlue, isDark, cardColor),
-            Expanded(
-              child: _buildTaskList(
-                adaptiveBlue,
-                textColor,
-                subTextColor,
-                cardColor,
-                isDark,
-              ),
+    return userAsync.when(
+      loading: () => const Scaffold(
+        backgroundColor: Color(0xFF020617),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF6366F1)),
+        ),
+      ),
+      error: (err, stack) =>
+          Scaffold(body: Center(child: Text("Ошибка загрузки профиля: $err"))),
+      data: (currentUserRole) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
+        final proColors = theme.extension<SkladColors>()!;
+
+        // Define text colors here so they are available for the whole screen
+        final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+        final subTextColor = isDark
+            ? Colors.white.withValues(alpha: 0.38)
+            : const Color(0xFF64748B);
+
+        return Scaffold(
+          // FIX: Use theme color instead of undefined 'bgColor'
+          backgroundColor: theme.scaffoldBackgroundColor,
+          body: SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 16),
+                _buildDateTimeline(
+                  isDark,
+                  proColors.accentAction,
+                  textColor,
+                  subTextColor,
+                ),
+                _buildCategoryToggle(
+                  proColors.accentAction,
+                  isDark,
+                  proColors.surfaceHigh,
+                ),
+                Expanded(
+                  child: _buildTaskList(
+                    proColors.accentAction,
+                    textColor,
+                    subTextColor,
+                    proColors.surfaceHigh,
+                    isDark,
+                    proColors,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: adaptiveBlue,
-        onPressed: () => _showTaskSheet(context),
-        child: Icon(
-          Icons.add,
-          color: isDark ? Colors.black : Colors.white,
-          size: 28,
-        ),
-      ),
+          ),
+          floatingActionButton: FloatingActionButton(
+            backgroundColor: proColors.accentAction,
+            onPressed: () => _showTaskSheet(context),
+            child: Icon(
+              Icons.add,
+              color: isDark ? Colors.black : Colors.white,
+              size: 28,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1680,19 +1728,23 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
   }
 
   // sdfds
-  Widget _importanceIndicator(Importance importance, bool isDark) {
+  Widget _importanceIndicator(
+    Importance importance,
+    bool isDark,
+    SkladColors proColors,
+  ) {
     return Container(
       width: 4,
       height: 32,
       decoration: BoxDecoration(
-        color: _getImportanceColor(importance, isDark),
+        color: _getImportanceColor(importance, proColors),
         borderRadius: BorderRadius.circular(2),
       ),
     );
   }
 
-  void _saveTaskToDatabase(Task task) {
-    FirebaseFirestore.instance.collection('tasks').doc(task.id).set({
+  Future<void> _saveTaskToDatabase(Task task) async {
+    await FirebaseFirestore.instance.collection('tasks').doc(task.id).set({
       'title': task.title,
       'date': task.date.toIso8601String(),
       'reminders': task.reminders
@@ -1703,8 +1755,8 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
       'creatorPfpUrl': task.creatorPfpUrl,
       'importance': task.importance.index,
       'recurrenceMode': task.recurrenceMode,
-      'selectedWeekdays': task.selectedWeekdays.toList(), // Add this
-      'selectedMonthDays': task.selectedMonthDays.toList(), // Add this
+      'selectedWeekdays': task.selectedWeekdays.toList(),
+      'selectedMonthDays': task.selectedMonthDays.toList(),
       'timestamp': FieldValue.serverTimestamp(),
       'xDays': task.xDays,
       'yDays': task.yDays,
@@ -1715,6 +1767,17 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
   // sldf
   void _deleteTaskFromFirebase(String id) {
     FirebaseFirestore.instance.collection('tasks').doc(id).delete();
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(color: Colors.white)),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 }
 

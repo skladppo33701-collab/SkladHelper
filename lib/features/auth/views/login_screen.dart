@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
 import 'package:random_password_generator/random_password_generator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:sklad_helper_33701/core/theme.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -13,20 +14,15 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  // Controllers for text input
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // State to toggle between Login and Sign Up
   bool _isLoginMode = true;
   bool _obscurePassword = true;
-  bool _isWandActive = false; // Add this line
-  // NEW: Generator Function
+  bool _isWandActive = false;
+
   void _generateStrongPassword() {
     final generator = RandomPasswordGenerator();
-
-    // The correct method is .randomPassword()
-    // Parameters: letters, uppercase, numbers, special, length
     String newPassword = generator.randomPassword(
       letters: true,
       uppercase: true,
@@ -34,11 +30,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       specialChar: true,
       passwordLength: 12,
     );
-
     setState(() {
       _passwordController.text = newPassword;
-      _obscurePassword =
-          false; // Show it so they can see the generated password
+      _obscurePassword = false;
     });
   }
 
@@ -57,17 +51,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     });
 
+    final proColors = Theme.of(context).extension<SkladColors>()!;
+
     return Container(
-      // 1. PREMIUM BACKGROUND GRADIENT
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
+        // Removed const
         gradient: RadialGradient(
-          center: Alignment(-0.5, -0.75),
+          center: const Alignment(-0.5, -0.75),
           radius: 1.5,
-          colors: [
-            Color(0xFF051733), // Your Blue Glow
-            Color(0xFF050206), // Deep Black
-          ],
-          stops: [0.0, 0.8],
+          colors: [proColors.surfaceLow, const Color(0xFF050206)],
+          stops: const [0.0, 0.8],
         ),
       ),
       child: Scaffold(
@@ -86,36 +79,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 60),
-
-                          // 2. DYNAMIC HEADER
                           _buildHeader(),
-
                           const SizedBox(height: 40),
-
-                          // 3. GOOGLE SOCIAL BUTTON
                           _buildSocialButton(),
-
                           const SizedBox(height: 28),
-
-                          // 4. DIVIDER
                           _buildDivider(),
-
                           const SizedBox(height: 18),
-
-                          // 5. INPUT FIELDS
                           _buildGlassInput(
                             controller: _emailController,
                             hint: 'Электронная почта',
+                            proColors: proColors,
                           ),
                           const SizedBox(height: 15),
                           _buildGlassInput(
                             controller: _passwordController,
                             hint: 'Пароль',
                             isPassword: true,
+                            proColors: proColors,
                           ),
-
-                          // 6. FORGOT PASSWORD (Only in Login Mode)
-                          // Inside your build method's Column
                           if (_isLoginMode)
                             Align(
                               alignment: Alignment.centerRight,
@@ -125,16 +106,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   _showPasswordResetConfirmation(
                                     context,
                                     email,
+                                    proColors,
                                   );
                                 },
                                 style: TextButton.styleFrom(
                                   splashFactory: NoSplash.splashFactory,
-                                  overlayColor: Colors
-                                      .transparent, // Stops the long-press glow
                                   padding: const EdgeInsets.only(
                                     top: 12,
                                     bottom: 20,
-                                  ), // Controlled padding
+                                  ),
                                 ),
                                 child: Text(
                                   'Забыли пароль?',
@@ -145,16 +125,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ),
                               ),
                             ),
-
                           const SizedBox(height: 30),
-
-                          // 7. MAIN ACTION BUTTON
-                          _buildMainButton(),
-
-                          const Spacer(), // Pushes toggle to the bottom
-                          // 8. DYNAMIC TOGGLE LINK
+                          _buildMainButton(proColors),
+                          const Spacer(),
                           _buildToggleLink(),
-
                           const SizedBox(height: 10),
                         ],
                       ),
@@ -168,8 +142,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
     );
   }
-
-  // --- UI COMPONENT HELPERS ---
 
   Widget _buildHeader() {
     return Text(
@@ -199,9 +171,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           foregroundColor: Colors.black,
           shape: const StadiumBorder(),
           elevation: 0,
-          // REMOVES RIPPLE AND LONG-PRESS HIGHLIGHT
           splashFactory: NoSplash.splashFactory,
-          overlayColor: Colors.transparent,
         ),
       ),
     );
@@ -229,46 +199,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget _buildGlassInput({
     required TextEditingController controller,
     required String hint,
+    required SkladColors proColors,
     bool isPassword = false,
   }) {
-    // Your Darker Royal Blue for the premium dark theme
-    const adaptiveBlue = Color(0xFFA78BFA);
-
     return Theme(
       data: Theme.of(context).copyWith(
-        textSelectionTheme: const TextSelectionThemeData(
-          selectionHandleColor: adaptiveBlue, // The 'Drop' symbol
-          selectionColor: Color(0x4D1E3A8A), // Highlight color (30% opacity)
-          cursorColor: adaptiveBlue, // Carrot color
+        textSelectionTheme: TextSelectionThemeData(
+          selectionHandleColor: proColors.accentAction,
+          selectionColor: proColors.accentAction.withValues(alpha: 0.3),
+          cursorColor: proColors.accentAction,
         ),
       ),
       child: TextField(
         controller: controller,
         obscureText: isPassword ? _obscurePassword : false,
         style: const TextStyle(color: Colors.white, fontSize: 16),
-        cursorColor: adaptiveBlue,
+        cursorColor: proColors.accentAction,
         cursorWidth: 2,
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
-          // 1. IS_DENSE and CONTENT_PADDING fix the excessive height
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(
             vertical: 10,
             horizontal: 0,
           ),
-
           enabledBorder: UnderlineInputBorder(
             borderSide: BorderSide(
               color: Colors.white.withValues(alpha: 0.15),
               width: 1.2,
             ),
           ),
-          // 2. FOCUSED BORDER - Thicker and Darker Blue
-          focusedBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(color: adaptiveBlue, width: 1.2),
+          focusedBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: proColors.accentAction, width: 1.2),
           ),
-
           suffixIconConstraints: const BoxConstraints(
             minHeight: 24,
             minWidth: 24,
@@ -295,9 +259,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             padding: const EdgeInsets.all(8),
                             child: Icon(
                               Icons.auto_fix_high,
-                              size: 24, // Increased size
+                              size: 24,
                               color: _isWandActive
-                                  ? adaptiveBlue
+                                  ? proColors.accentAction
                                   : Colors.white.withValues(alpha: 0.5),
                             ),
                           ),
@@ -305,14 +269,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       IconButton(
                         padding: const EdgeInsets.all(8),
                         constraints: const BoxConstraints(),
-                        splashColor: Colors.transparent, // Kill ripple
-                        highlightColor: Colors.transparent, // Kill ripple
                         icon: Icon(
                           _obscurePassword
                               ? Icons.visibility_off
                               : Icons.visibility,
                           color: Colors.white.withValues(alpha: 0.5),
-                          size: 24, // Increased size
+                          size: 24,
                         ),
                         onPressed: () => setState(
                           () => _obscurePassword = !_obscurePassword,
@@ -327,7 +289,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildMainButton() {
+  Widget _buildMainButton(SkladColors proColors) {
     final authStatus = ref.watch(authProvider);
     final isLoading = authStatus == AuthStatus.loading;
 
@@ -351,11 +313,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 }
               },
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF111111),
+          backgroundColor: proColors.surfaceHigh,
           foregroundColor: Colors.white,
           elevation: 0,
-          splashFactory: NoSplash.splashFactory, // No ripple
-          overlayColor: Colors.transparent, // No long-press highlight
           shape: StadiumBorder(
             side: BorderSide(
               color: Colors.white.withValues(alpha: 0.1),
@@ -368,7 +328,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 height: 24,
                 width: 24,
                 child: CircularProgressIndicator(
-                  color: Colors.white, // Or use adaptiveBlue for the spinner
+                  color: Colors.white,
                   strokeWidth: 2.5,
                 ),
               )
@@ -396,13 +356,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         TextButton(
           onPressed: () => setState(() => _isLoginMode = !_isLoginMode),
-          style: TextButton.styleFrom(
-            splashFactory: NoSplash.splashFactory, // Kill ripple
-            foregroundColor: Colors.white,
-          ),
           child: Text(
             _isLoginMode ? 'Создать' : 'Войти',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              color: Colors.white,
+            ),
           ),
         ),
       ],
@@ -420,25 +380,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  // ───────────────── PASSWORD RESET DIALOG ─────────────────
   Future<void> _showPasswordResetConfirmation(
     BuildContext context,
     String email,
+    SkladColors proColors,
   ) async {
     final theme = Theme.of(context);
-    const adaptiveBlue = Color(0xFFA78BFA); // Using your Royal Blue
 
     return showDialog(
       context: context,
       builder: (context) => Theme(
         data: theme.copyWith(
-          textSelectionTheme: const TextSelectionThemeData(
-            selectionHandleColor: adaptiveBlue,
-            cursorColor: adaptiveBlue,
+          textSelectionTheme: TextSelectionThemeData(
+            selectionHandleColor: proColors.accentAction,
+            cursorColor: proColors.accentAction,
           ),
         ),
         child: AlertDialog(
-          backgroundColor: const Color(0xFF111827),
+          backgroundColor: proColors.surfaceLow,
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(28),
@@ -448,9 +407,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           title: _buildUnifiedHeader(
             Icons.lock_reset_outlined,
             'Сброс пароля',
-            adaptiveBlue,
-            theme.colorScheme,
-            theme.textTheme,
+            proColors.accentAction,
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -477,7 +434,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.white, // Changed to white for visibility
+                    color: Colors.white,
                     fontSize: 14,
                   ),
                 ),
@@ -487,13 +444,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           actions: [
             Row(
-              // Use a Row to prevent button overflow
               children: [
                 Expanded(
                   child: _buildDialogAction(
                     'Отмена',
                     () => Navigator.pop(context),
-                    theme.colorScheme,
                     isPrimary: false,
                   ),
                 ),
@@ -503,11 +458,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     'Отправить',
                     () async {
                       Navigator.pop(context);
-                      await _sendPasswordReset(context, email);
+                      await _sendPasswordReset(context, email, proColors);
                     },
-                    theme.colorScheme,
                     isPrimary: true,
-                    color: adaptiveBlue,
+                    color: proColors.accentAction,
                   ),
                 ),
               ],
@@ -517,15 +471,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
     );
   }
-  // ───────────────── DIALOG HELPERS ─────────────────
 
-  Widget _buildUnifiedHeader(
-    IconData icon,
-    String title,
-    Color color,
-    ColorScheme colors,
-    TextTheme textTheme,
-  ) {
+  Widget _buildUnifiedHeader(IconData icon, String title, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 24),
       decoration: BoxDecoration(
@@ -551,14 +498,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildDialogAction(
     String text,
-    VoidCallback onTap,
-    ColorScheme colors, {
+    VoidCallback onTap, {
     required bool isPrimary,
     Color? color,
   }) {
     return SizedBox(
       height: 44,
-      width: 110,
       child: isPrimary
           ? ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -566,7 +511,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 foregroundColor: Colors.white,
                 shape: const StadiumBorder(),
                 elevation: 0,
-                splashFactory: NoSplash.splashFactory, // Removes ripple
               ),
               onPressed: onTap,
               child: Text(
@@ -578,7 +522,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               style: OutlinedButton.styleFrom(
                 shape: const StadiumBorder(),
                 side: const BorderSide(color: Colors.white24),
-                splashFactory: NoSplash.splashFactory, // Removes ripple
               ),
               onPressed: onTap,
               child: Text(text, style: const TextStyle(color: Colors.white70)),
@@ -586,19 +529,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  // ───────────────── PASSWORD RESET LOGIC ─────────────────
-  Future<void> _sendPasswordReset(BuildContext context, String email) async {
+  Future<void> _sendPasswordReset(
+    BuildContext context,
+    String email,
+    SkladColors proColors,
+  ) async {
     try {
-      // 1. Trigger the Firebase reset email
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-
       if (!context.mounted) return;
-
-      // 2. Show a success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Ссылка для сброса отправлена на вашу почту'),
-          backgroundColor: const Color(0xFF6366F1), // Using a vibrant Indigo
+          backgroundColor: proColors.accentAction,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -607,8 +549,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
     } on FirebaseAuthException catch (e) {
       if (!context.mounted) return;
-
-      // 3. Handle specific Firebase errors
       String message = 'Ошибка при отправке';
       if (e.code == 'user-not-found') {
         message = 'Пользователь с такой почтой не найден';

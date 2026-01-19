@@ -1,130 +1,141 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+/// Professional Color Palette Extension
+class SkladColors extends ThemeExtension<SkladColors> {
+  final Color accentAction;
+  final Color surfaceHigh; // For cards/elevated items
+  final Color surfaceLow; // For background depth
+  final Color success;
+  final Color warning;
+  final Color error;
+
+  SkladColors({
+    required this.accentAction,
+    required this.surfaceHigh,
+    required this.surfaceLow,
+    required this.success,
+    required this.warning,
+    required this.error,
+  });
+
+  @override
+  SkladColors copyWith({Color? accentAction}) => this;
+
+  @override
+  SkladColors lerp(ThemeExtension<SkladColors>? other, double t) {
+    if (other is! SkladColors) return this;
+    return SkladColors(
+      accentAction: Color.lerp(accentAction, other.accentAction, t)!,
+      surfaceHigh: Color.lerp(surfaceHigh, other.surfaceHigh, t)!,
+      surfaceLow: Color.lerp(surfaceLow, other.surfaceLow, t)!,
+      success: Color.lerp(success, other.success, t)!,
+      warning: Color.lerp(warning, other.warning, t)!,
+      error: Color.lerp(error, other.error, t)!,
+    );
+  }
+}
+
 class AppTheme {
-  // ───────────────── BRAND COLORS ─────────────────
-  static const Color brandBlue = Color(0xFF2563EB);
+  // Brand Identity Colors
+  static const Color proIndigo = Color(0xFF6366F1); // Modern Blue-Purple
+  static const Color darkSlate = Color(0xFF0F172A); // Deep Slate Background
 
-  // Dark palette (SOLID — no opacity)
-  static const Color darkBackground = Color(0xFF0F1115);
-  static const Color darkSurface = Color(0xFF1B1D23);
-  static const Color darkInput = Color(0xFF2A2D36);
-
-  static const Color textPrimary = Color(0xFFEDEEF0);
-  static const Color textSecondary = Color(0xFFB4B7C0);
-  static const Color iconColor = Color(0xFFD1D4DC);
-
-  // ───────────────── DARK THEME ─────────────────
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: darkBackground,
+      scaffoldBackgroundColor: const Color(0xFF020617), // Richer "OLED" Black
+      primaryColor: proIndigo,
 
-      // ───────── COLOR SCHEME ─────────
+      // Modern Extensions
+      extensions: [
+        SkladColors(
+          accentAction: proIndigo,
+          surfaceHigh: const Color(0xFF1E293B), // Navy-Grey for cards
+          surfaceLow: const Color(0xFF0F172A),
+          success: const Color(0xFF10B981),
+          warning: const Color(0xFFF59E0B),
+          error: const Color(0xFFEF4444),
+        ),
+      ],
+
       colorScheme: ColorScheme.fromSeed(
-        seedColor: brandBlue,
+        seedColor: proIndigo,
         brightness: Brightness.dark,
-        primary: brandBlue,
-        onPrimary: Colors.white,
-        secondary: brandBlue,
-        onSecondary: Colors.white,
-        surface: darkSurface,
-        onSurface: textPrimary,
-        error: Colors.redAccent,
-        onError: Colors.black,
-        surfaceTint: Colors.transparent, // Removes purple tint from surfaces
+        primary: proIndigo,
+        surface: const Color(0xFF0F172A),
+        onSurface: Colors.white,
       ),
 
-      // ───────── TYPOGRAPHY ─────────
-      textTheme: GoogleFonts.robotoTextTheme(
-        ThemeData.dark().textTheme,
-      ).apply(bodyColor: textPrimary, displayColor: textPrimary),
+      // Professional Typography
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
+          .copyWith(
+            displayLarge: GoogleFonts.inter(
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+            titleLarge: GoogleFonts.inter(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+            bodyMedium: GoogleFonts.inter(
+              color: Colors.white.withValues(alpha: 0.8),
+            ),
+          ),
 
-      // ───────────────── TEXT SELECTION (NO PURPLE) ─────────────────
-      textSelectionTheme: TextSelectionThemeData(
-        cursorColor: brandBlue,
-        selectionColor: brandBlue.withValues(
-          alpha: 0.2,
-        ), // Light blue highlight
-        selectionHandleColor: brandBlue, // FIXED: The 'drop' handle is now blue
-      ),
-
-      // ───────── ICONS (NO BLUR) ─────────
-      iconTheme: const IconThemeData(color: iconColor, size: 22),
-
-      // ───────────────── INPUT DECORATION (SINGLE LINE STYLE) ─────────────────
+      // Input Decoration (Clean Samsung/Google Look)
       inputDecorationTheme: InputDecorationTheme(
-        filled: false, // Set to false for the clean "line-only" look
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-        // Floating label colors
-        floatingLabelStyle: const TextStyle(
-          color: brandBlue,
-          fontWeight: FontWeight.bold,
+        filled: true,
+        fillColor: const Color(0xFF1E293B),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
-        labelStyle: const TextStyle(color: textSecondary),
-        // FIXED: Using UnderlineInputBorder for the single line style
-        enabledBorder: const UnderlineInputBorder(
-          borderSide: BorderSide(color: Colors.white12, width: 1),
-        ),
-        focusedBorder: const UnderlineInputBorder(
-          borderSide: BorderSide(color: brandBlue, width: 2),
-        ),
-        border: const UnderlineInputBorder(
-          borderSide: BorderSide(color: Colors.white12),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: proIndigo, width: 2),
         ),
       ),
 
-      // ───────── BUTTONS ─────────
+      // Modern Button Style
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: brandBlue,
+          backgroundColor: proIndigo,
           foregroundColor: Colors.white,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(12),
           ),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          elevation: 0,
         ),
       ),
+    );
+  }
 
-      // ───────── DIALOGS ─────────
-      dialogTheme: DialogThemeData(
-        backgroundColor: darkSurface,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
-          side: const BorderSide(color: Colors.white10, width: 1),
+  // Light Theme (Apple/Samsung Style)
+  static ThemeData get lightTheme {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+      primaryColor: proIndigo,
+      extensions: [
+        SkladColors(
+          accentAction: proIndigo,
+          surfaceHigh: Colors.white,
+          surfaceLow: const Color(0xFFF1F5F9),
+          success: const Color(0xFF10B981),
+          warning: const Color(0xFFF59E0B),
+          error: const Color(0xFFEF4444),
         ),
-        titleTextStyle: GoogleFonts.roboto(
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-          color: textPrimary,
-        ),
-        contentTextStyle: GoogleFonts.roboto(
-          fontSize: 15,
-          color: textSecondary,
-        ),
+      ],
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: proIndigo,
+        brightness: Brightness.light,
+        surface: Colors.white,
       ),
-
-      // ───────── SWITCHES ─────────
-      switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith(
-          (states) =>
-              states.contains(WidgetState.selected) ? Colors.white : iconColor,
-        ),
-        trackColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? brandBlue.withValues(alpha: 0.4)
-              : darkInput,
-        ),
-      ),
-
-      // ───────── DIVIDERS ─────────
-      dividerTheme: DividerThemeData(
-        color: Colors.white.withValues(alpha: 0.08),
-        thickness: 1,
-      ),
+      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
     );
   }
 }

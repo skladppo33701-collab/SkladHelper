@@ -6,19 +6,17 @@ import 'package:sklad_helper_33701/features/auth/views/login_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
-import 'dart:io';
-import 'package:android_intent_plus/android_intent.dart';
 import 'package:sklad_helper_33701/features/dashboard/views/manager_dashboard.dart';
 import 'package:sklad_helper_33701/features/dashboard/views/loader_dashboard.dart';
 import 'package:sklad_helper_33701/core/providers/theme_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:sklad_helper_33701/core/theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(ProviderScope(child: MyApp()));
 }
 
 class MyApp extends ConsumerWidget {
@@ -31,8 +29,8 @@ class MyApp extends ConsumerWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
-      theme: ThemeData(brightness: Brightness.light, useMaterial3: true),
-      darkTheme: ThemeData(brightness: Brightness.dark, useMaterial3: true),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
 
       // --- FIX: Add these 3 lines for Russian Language support ---
       localizationsDelegates: const [
@@ -44,7 +42,6 @@ class MyApp extends ConsumerWidget {
         Locale('ru', 'RU'), // Set Russian as supported
       ],
       locale: const Locale('ru', 'RU'), // Force the app to use Russian
-
       // -----------------------------------------------------------
       home: const RootGate(),
     );
@@ -152,127 +149,118 @@ class VerificationPendingScreen extends ConsumerStatefulWidget {
 
 class _VerificationPendingScreenState
     extends ConsumerState<VerificationPendingScreen> {
-  // Define the timer variable so we can cancel it later
-  late Timer _timer;
+  Timer? _timer;
+  bool _isChecking = false;
 
   @override
   void initState() {
     super.initState();
+    // Start checking every 3 seconds
+    _timer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _checkEmailVerification(),
+    );
+  }
 
-    // 2. Set up the periodic check every 3 seconds
-    _timer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+  Future<void> _checkEmailVerification() async {
+    if (_isChecking) return;
+    setState(() => _isChecking = true);
+
+    try {
       final user = FirebaseAuth.instance.currentUser;
-      await user?.reload(); // Critical: Forces Firebase to check current status
+      await user?.reload(); // Refresh the user's data from Firebase
 
-      if (user != null && user.emailVerified) {
-        timer.cancel();
-        // 3. This triggers RootGate to rebuild and show the Dashboard
-        ref.invalidate(authStateProvider);
+      if (user?.emailVerified ?? false) {
+        _timer?.cancel();
+        if (mounted) {
+          // Tell Riverpod to re-run the auth check now that the user is verified
+          ref.invalidate(authStateProvider);
+        }
       }
-    });
+    } catch (e) {
+      debugPrint("Error checking verification: $e");
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
   }
 
   @override
   void dispose() {
-    _timer.cancel(); // Always clean up timers
+    _timer?.cancel(); // CRITICAL: Stop the timer when the widget is destroyed
     super.dispose();
-  }
-
-  Future<void> _openMailApp(BuildContext context) async {
-    if (Platform.isAndroid) {
-      // This is a direct command to the Android OS to open the Gmail Inbox
-      final AndroidIntent intent = const AndroidIntent(
-        action: 'android.intent.action.MAIN',
-        category: 'android.intent.category.APP_EMAIL',
-        // We force it to open in a new task so it doesn't "replace" your app
-        flags: [0x10000000], // FLAG_ACTIVITY_NEW_TASK
-      );
-
-      try {
-        await intent.launch();
-        return;
-      } catch (e) {
-        debugPrint("Direct Intent failed: $e");
-      }
-    }
-
-    // Fallback for iOS or if the above fails
-    final Uri mailtoUri = Uri.parse("mailto:");
-    if (await canLaunchUrl(mailtoUri)) {
-      await launchUrl(mailtoUri, mode: LaunchMode.externalApplication);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF051733), Color(0xFF000000)],
-          ),
-        ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(30.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.mark_email_unread_outlined,
-                  size: 80,
-                  color: Colors.blueAccent,
+      backgroundColor: const Color(
+        0xFF0F172A,
+      ), // Matching our Midnight Blue theme
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 30),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.mark_email_read_outlined,
+                size: 80,
+                color: Color(0xFF6366F1),
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                "Подтвердите почту",
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  "Подтвердите почту",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  "Ссылка для подтверждения отправлена на вашу почту. Пожалуйста, проверьте входящие сообщения или папку 'Спам'.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
-                ),
-                const SizedBox(height: 32),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                "Ссылка для подтверждения отправлена на вашу почту. Пожалуйста, проверьте входящие сообщения.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+              const SizedBox(height: 40),
 
-                // NEW: OPEN GMAIL BUTTON
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                    ),
-                    onPressed: () {
-                      _openMailApp(context);
-                    },
-                    icon: const Icon(Icons.email),
-                    label: const Text(
-                      "Открыть Gmail",
-                      style: TextStyle(fontSize: 16),
+              // NEW: Manual Refresh Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
+                  onPressed: _isChecking ? null : _checkEmailVerification,
+                  child: _isChecking
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          "Я уже подтвердил",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                 ),
+              ),
 
-                const SizedBox(height: 12),
-
-                TextButton(
-                  onPressed: () => FirebaseAuth.instance.signOut(),
-                  child: const Text(
-                    "Вернуться к входу",
-                    style: TextStyle(color: Colors.white60),
-                  ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => FirebaseAuth.instance.signOut(),
+                child: const Text(
+                  "Вернуться к входу",
+                  style: TextStyle(color: Colors.white60),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

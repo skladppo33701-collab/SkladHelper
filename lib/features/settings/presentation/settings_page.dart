@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:sklad_helper_33701/core/theme.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -27,15 +28,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final textTheme = theme.textTheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final adaptiveBlue = isDark
-        ? const Color(0xFF60A5FA)
-        : const Color(0xFF1E3A8A);
+    final proColors = Theme.of(context).extension<SkladColors>()!;
 
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: colors.surface,
+        backgroundColor: proColors.surfaceLow, // Replaces bgColor
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(28),
@@ -46,7 +44,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         title: _buildUnifiedHeader(
           Icons.lock_reset_outlined,
           'Сброс пароля',
-          adaptiveBlue,
+          proColors.accentAction,
           colors,
           textTheme,
         ),
@@ -61,50 +59,68 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 color: colors.onSurface.withValues(alpha: 0.7),
               ),
             ),
-            const SizedBox(height: 16),
-            // Consistent Rounded Box showing the email
+            const SizedBox(height: 20),
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : Colors.black.withValues(alpha: 0.03),
-                borderRadius: BorderRadius.circular(14),
+                color: proColors.warning.withValues(
+                  alpha: 0.1,
+                ), // Replaces Colors.amber
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isDark ? Colors.white12 : Colors.black12,
+                  color: proColors.warning.withValues(alpha: 0.3),
                 ),
               ),
-              child: Text(
-                email,
-                textAlign: TextAlign.center,
-                style: textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: adaptiveBlue,
-                ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: proColors.warning,
+                    size: 20,
+                  ), // Remove const
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Если вы не видите письма, обязательно проверьте папку "Спам".',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: proColors.warning,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        actionsAlignment: MainAxisAlignment.center,
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         actions: [
-          _buildDialogAction(
-            'Отмена',
-            () => Navigator.pop(context),
-            colors,
-            isPrimary: false,
-          ),
-          const SizedBox(width: 12),
-          _buildDialogAction(
-            'Отправить',
-            () async {
-              Navigator.pop(context); // Close dialog
-              await _sendPasswordReset(context, email); // Trigger the email
-            },
-            colors,
-            isPrimary: true,
-            color: adaptiveBlue,
+          Row(
+            children: [
+              Expanded(
+                child: _buildDialogAction(
+                  'Отмена',
+                  () => Navigator.pop(context),
+                  colors,
+                  isPrimary: false,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildDialogAction(
+                  'Отправить',
+                  () async {
+                    Navigator.pop(context); // Close the dialog
+                    await _sendPasswordReset(
+                      context,
+                      email,
+                    ); // This uses the function
+                  },
+                  colors,
+                  isPrimary: true,
+                  color: proColors.accentAction,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -121,18 +137,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final textTheme = theme.textTheme;
-    final adaptiveBlue = isDark
-        ? const Color(0xFF60A5FA)
-        : const Color(0xFF1E3A8A);
+    final proColors = Theme.of(context).extension<SkladColors>()!;
 
     return showDialog(
       context: context,
       builder: (context) => Theme(
         data: theme.copyWith(
           textSelectionTheme: TextSelectionThemeData(
-            selectionHandleColor: adaptiveBlue,
-            selectionColor: adaptiveBlue.withValues(alpha: 0.2),
-            cursorColor: adaptiveBlue,
+            selectionHandleColor: proColors.accentAction,
+            selectionColor: proColors.accentAction.withValues(alpha: 0.2),
+            cursorColor: proColors.accentAction,
           ),
         ),
         child: AlertDialog(
@@ -149,7 +163,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           title: _buildUnifiedHeader(
             Icons.alternate_email_rounded,
             'Изменить почту',
-            adaptiveBlue,
+            proColors.accentAction,
             colors,
             textTheme,
           ),
@@ -185,10 +199,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   controller: controller,
                   autofocus: true,
                   textAlign: TextAlign.center,
-                  cursorColor: adaptiveBlue,
+                  cursorColor: proColors.accentAction,
                   style: textTheme.bodyLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: adaptiveBlue,
+                    color: proColors.accentAction,
                   ),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
@@ -248,7 +262,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               },
               colors,
               isPrimary: true,
-              color: adaptiveBlue,
+              color: proColors.accentAction,
             ),
           ],
         ),
@@ -258,25 +272,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   // --- REFINED UPLOAD FUNCTION (WITH CROPPER) ---
   Future<void> _updateProfilePicture(BuildContext context, String uid) async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    const primaryBlue = Color(0xFF1E3A8A);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final proColors = theme.extension<SkladColors>()!; // Use professional theme
+
     final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
 
-    if (image == null) return;
+    // 1. Safe pick: Checks if user cancels the gallery
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 50, // Optimize image size
+    );
 
+    if (image == null) return; // Stop if cancelled
+
+    // 2. Cropping with theme-consistent UI
     final croppedFile = await ImageCropper().cropImage(
       sourcePath: image.path,
       aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: 'Редактировать',
-          toolbarColor: primaryBlue,
+          toolbarColor: proColors.surfaceLow, // Use theme color
           toolbarWidgetColor: Colors.white,
-          activeControlsWidgetColor: primaryBlue,
+          activeControlsWidgetColor: proColors.accentAction,
           initAspectRatio: CropAspectRatioPreset.square,
           lockAspectRatio: true,
-          backgroundColor: isDark ? Colors.black : Colors.white,
+          backgroundColor: isDark ? const Color(0xFF020617) : Colors.white,
         ),
         IOSUiSettings(
           title: 'Редактировать',
@@ -292,6 +314,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     try {
       final dio = Dio();
+      // FIX: Added timeout to prevent infinite spinning if network is bad
+      dio.options.connectTimeout = const Duration(seconds: 10);
+      dio.options.receiveTimeout = const Duration(seconds: 10);
+
       final formData = FormData.fromMap({
         "file": await MultipartFile.fromFile(
           croppedFile.path,
@@ -308,31 +334,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (response.statusCode == 200 && response.data['secure_url'] != null) {
         final String imageUrl = response.data['secure_url'];
 
-        // 🔥 Updated to photoUrl to match your new UserModel naming
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
           'photoUrl': imageUrl,
         });
 
+        // FIX: Always check mounted before calling ref or context-based UI
+        if (!mounted) return;
         ref.invalidate(userRoleProvider);
 
-        // ✅ FIXED: Check context.mounted specifically before using ScaffoldMessenger
-        if (!context.mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Фото успешно обновлено'),
-            backgroundColor: primaryBlue,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Фото успешно обновлено')));
       }
     } catch (e) {
-      debugPrint("Upload Error: $e");
-    } finally {
-      // ✅ Using State.mounted for setState is correct
       if (mounted) {
-        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Ошибка загрузки: $e")));
       }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -346,9 +367,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final textTheme = theme.textTheme;
-    final adaptiveBlue = isDark
-        ? const Color(0xFF60A5FA)
-        : const Color(0xFF1E3A8A);
+    final proColors = Theme.of(context).extension<SkladColors>()!;
 
     return showDialog(
       context: context,
@@ -356,9 +375,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         // Force the selection handle and cursor to be Blue, not Purple
         data: theme.copyWith(
           textSelectionTheme: TextSelectionThemeData(
-            selectionHandleColor: adaptiveBlue,
-            selectionColor: adaptiveBlue.withValues(alpha: 0.2),
-            cursorColor: adaptiveBlue,
+            selectionHandleColor: proColors.accentAction,
+            selectionColor: proColors.accentAction.withValues(alpha: 0.2),
+            cursorColor: proColors.accentAction,
           ),
         ),
         child: AlertDialog(
@@ -375,7 +394,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           title: _buildUnifiedHeader(
             Icons.badge_outlined,
             'Личные данные',
-            adaptiveBlue,
+            proColors.accentAction,
             colors,
             textTheme,
           ),
@@ -410,10 +429,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   controller: controller,
                   autofocus: true,
                   textAlign: TextAlign.center,
-                  cursorColor: adaptiveBlue,
+                  cursorColor: proColors.accentAction,
                   style: textTheme.bodyLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: adaptiveBlue,
+                    color: proColors.accentAction,
                   ),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
@@ -464,7 +483,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               },
               colors,
               isPrimary: true,
-              color: adaptiveBlue,
+              color: proColors.accentAction,
             ),
           ],
         ),
@@ -481,7 +500,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
 
     const primaryBlue = Color(0xFF1E3A8A);
-    final adaptiveBlue = isDark ? const Color(0xFF60A5FA) : primaryBlue;
+    final proColors = Theme.of(context).extension<SkladColors>()!;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -507,7 +526,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.cleaning_services_outlined,
                     'Кэш изображений',
                     'Очистить временные данные',
-                    adaptiveBlue,
+                    proColors.accentAction,
                     isDark: isDark,
                     showChevron: true, // ✅ Shows the '>' indicator
                     onTap: () {
@@ -522,11 +541,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.vibration,
                     'Отклик сканера',
                     'Вибрация при чтении',
-                    adaptiveBlue,
+                    proColors.accentAction,
                     isDark: isDark,
                     trailing: Switch(
-                      activeThumbColor: adaptiveBlue,
-                      activeTrackColor: adaptiveBlue.withValues(alpha: 0.4),
+                      activeThumbColor: proColors.accentAction,
+                      activeTrackColor: proColors.accentAction.withValues(
+                        alpha: 0.4,
+                      ),
                       value: true,
                       onChanged: (v) {},
                     ),
@@ -540,7 +561,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.email_outlined,
                     'Почта',
                     user.email,
-                    adaptiveBlue,
+                    proColors.accentAction,
                     isDark: isDark,
                     showChevron: true, // ✅ Shows the '>' symbol
                     onTap: () => _updateEmail(context, user.email, isDark),
@@ -549,7 +570,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.lock_reset_outlined,
                     'Сброс пароля',
                     'Отправить ссылку',
-                    adaptiveBlue,
+                    proColors.accentAction,
                     isDark: isDark,
                     showChevron: true, // ✅ Shows the '>' symbol
                     onTap: () =>
@@ -573,11 +594,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.dark_mode_outlined,
                     'Темная тема',
                     'Переключить режим',
-                    adaptiveBlue,
+                    proColors.accentAction,
                     isDark: isDark,
                     trailing: Switch(
-                      activeThumbColor: adaptiveBlue,
-                      activeTrackColor: adaptiveBlue.withValues(alpha: 0.4),
+                      activeThumbColor: proColors.accentAction,
+                      activeTrackColor: proColors.accentAction.withValues(
+                        alpha: 0.4,
+                      ),
                       value: ref.watch(themeModeProvider) == ThemeMode.dark,
                       onChanged: (val) {
                         ref.read(themeModeProvider.notifier).state = val
@@ -619,9 +642,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     Color blue,
   ) {
     // Use brighter blue for dark mode visibility
-    final adaptiveBlue = isDark
-        ? const Color(0xFF60A5FA)
-        : const Color(0xFF1E3A8A);
+    final proColors = Theme.of(context).extension<SkladColors>()!;
     final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
     final displayName = user.name.isNotEmpty ? user.name : "Пользователь";
     final dividerColor = isDark
@@ -735,7 +756,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               const SizedBox(width: 8),
               GestureDetector(
                 onTap: () => _updateProfileName(context, user.name, isDark),
-                child: Icon(Icons.edit, size: 18, color: adaptiveBlue),
+                child: Icon(
+                  Icons.edit,
+                  size: 18,
+                  color: proColors.accentAction,
+                ),
               ),
             ],
           ),
@@ -748,10 +773,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
-              color: adaptiveBlue.withValues(alpha: isDark ? 0.15 : 0.08),
+              color: proColors.accentAction.withValues(
+                alpha: isDark ? 0.15 : 0.08,
+              ),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: adaptiveBlue.withValues(alpha: isDark ? 0.4 : 0.2),
+                color: proColors.accentAction.withValues(
+                  alpha: isDark ? 0.4 : 0.2,
+                ),
               ),
             ),
             child: Text(
@@ -759,7 +788,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w900,
-                color: adaptiveBlue,
+                color: proColors.accentAction,
                 letterSpacing: 1.5,
               ),
             ),
@@ -773,19 +802,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildStatItem('Сканы', '1.2k', adaptiveBlue, isDark),
+                  _buildStatItem(
+                    'Сканы',
+                    '1.2k',
+                    proColors.accentAction,
+                    isDark,
+                  ),
                   VerticalDivider(
                     width: 1,
                     thickness: 1,
                     color: isDark ? Colors.white10 : Colors.black12,
                   ),
-                  _buildStatItem('Задачи', '42', adaptiveBlue, isDark),
+                  _buildStatItem(
+                    'Задачи',
+                    '42',
+                    proColors.accentAction,
+                    isDark,
+                  ),
                   VerticalDivider(
                     width: 1,
                     thickness: 1,
                     color: isDark ? Colors.white10 : Colors.black12,
                   ),
-                  _buildStatItem('Ранг', 'A', adaptiveBlue, isDark),
+                  _buildStatItem('Ранг', 'A', proColors.accentAction, isDark),
                 ],
               ),
             ),
@@ -1015,16 +1054,37 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   // ───────────────── PASSWORD RESET LOGIC ─────────────────
   Future<void> _sendPasswordReset(BuildContext context, String email) async {
+    // 1. Access the professional theme colors
+    final proColors = Theme.of(context).extension<SkladColors>()!;
+
     try {
+      // 2. Trigger the Firebase reset email
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
 
+      // 3. Safety check: Ensure the screen is still active before showing UI
       if (!context.mounted) return;
 
-      // Show a formal success dialog instead of just a SnackBar
+      // 4. Show a floating feedback message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Ссылка для сброса отправлена на почту'),
+          backgroundColor: proColors.accentAction,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      // 5. FIXED: Call the success dialog with BOTH required arguments
       _showResetSuccessDialog(context, email);
     } catch (e) {
       if (!context.mounted) return;
-      _showErrorSnackBar(context, 'Ошибка: ${e.toString()}');
+
+      // 6. Handle errors (e.g., no internet or invalid email)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ошибка при отправке письма'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     }
   }
 
@@ -1033,25 +1093,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final textTheme = theme.textTheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final adaptiveBlue = isDark
-        ? const Color(0xFF60A5FA)
-        : const Color(0xFF1E3A8A);
+    final proColors = theme.extension<SkladColors>()!;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: colors.surface,
+        // Use the professional surface color instead of generic background
+        backgroundColor: proColors.surfaceLow,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(28),
-          side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         titlePadding: EdgeInsets.zero,
         title: _buildUnifiedHeader(
           Icons.mark_email_read_outlined,
           'Письмо отправлено',
-          Colors.green, // Success color
+          proColors.success, // Use the success color from your pro theme
           colors,
           textTheme,
         ),
@@ -1060,32 +1118,37 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           children: [
             const SizedBox(height: 8),
             Text(
-              'Инструкции по сбросу пароля были отправлены на адрес:',
+              'Инструкции по сбросу пароля были успешно отправлены на адрес:',
               textAlign: TextAlign.center,
-              style: textTheme.bodyMedium,
+              style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
             ),
             const SizedBox(height: 12),
             Text(
               email,
-              style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 20),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.1),
+                color: proColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: proColors.warning.withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline, color: Colors.amber, size: 20),
+                  Icon(Icons.info_outline, color: proColors.warning, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'Если вы не видите письма, обязательно проверьте папку "Спам".',
                       style: textTheme.bodySmall?.copyWith(
-                        color: isDark ? Colors.amber[200] : Colors.amber[900],
+                        color: proColors.warning,
                       ),
                     ),
                   ),
@@ -1096,12 +1159,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         actions: [
-          _buildDialogAction(
-            'Понятно',
-            () => Navigator.pop(context),
-            colors,
-            isPrimary: true,
-            color: adaptiveBlue,
+          // FIXED: Changed from "Отправить" to "Понятно" as the process is finished
+          Center(
+            child: SizedBox(
+              width: double.infinity,
+              child: _buildDialogAction(
+                'Понятно',
+                () => Navigator.pop(context),
+                colors,
+                isPrimary: true,
+                color: proColors.accentAction,
+              ),
+            ),
           ),
         ],
       ),
