@@ -6,9 +6,10 @@ import '../../auth/providers/auth_provider.dart';
 import '../../auth/models/user_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:dio/dio.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
+import 'package:pocketbase/pocketbase.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_cropper/image_cropper.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -19,7 +20,7 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _isUploading = false;
-
+  final pb = PocketBase('http://100.123.47.14:8090');
   // ───────────────── PASSWORD RESET DIALOG ─────────────────
   Future<void> _showPasswordResetConfirmation(
     BuildContext context,
@@ -270,21 +271,45 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  // --- REFINED UPLOAD FUNCTION (WITH CROPPER) ---
   Future<void> _updateProfilePicture(BuildContext context, String uid) async {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final proColors = theme.extension<SkladColors>()!;
 
+    // 1. SAFETY CHECK FOR 2GB LIMIT (With Timeout)
+    try {
+      final totalRecords = await pb
+          .collection('users')
+          .getList(page: 1, perPage: 1)
+          .timeout(
+            const Duration(seconds: 2),
+          ); // Don't hang if laptop is offline
+
+      if (totalRecords.totalItems > 20000) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Лимит хранилища (2ГБ) исчерпан.')),
+        );
+        return;
+      }
+    } catch (e) {
+      debugPrint("Server check skipped: $e");
+    }
+
     final picker = ImagePicker();
+
+    // 2. EXTREME COMPRESSION TO SAVE DISK SPACE
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 50,
+      maxWidth: 400,
+      maxHeight: 400,
+      imageQuality: 30,
     );
 
     if (image == null) return;
 
-    final croppedFile = await ImageCropper().cropImage(
+    // 3. IMAGE CROPPER
+    final CroppedFile? croppedFile = await ImageCropper().cropImage(
       sourcePath: image.path,
       aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
       uiSettings: [
@@ -310,46 +335,40 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     setState(() => _isUploading = true);
 
     try {
-      final dio = Dio();
-      dio.options.connectTimeout = const Duration(seconds: 10);
-      dio.options.receiveTimeout = const Duration(seconds: 10);
+      // 4. UPLOAD DIRECTLY TO WORK LAPTOP
+      final record = await pb
+          .collection('users')
+          .create(
+            body: {'username': uid},
+            files: [
+              await http.MultipartFile.fromPath('photo', croppedFile.path),
+            ],
+          );
 
-      final formData = FormData.fromMap({
-        "file": await MultipartFile.fromFile(
-          croppedFile.path,
-          filename: "$uid.jpg",
-        ),
-        "upload_preset": "sklad_helper_preset",
+      // 5. GENERATE URL FROM POCKETBASE
+      final String imageUrl = pb.files
+          .getUrl(record, record.getStringValue('photo'))
+          .toString();
+
+      // 6. UPDATE FIRESTORE (Matches your AppUser model)
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'photoUrl': imageUrl,
       });
 
-      final response = await dio.post(
-        "https://api.cloudinary.com/v1_1/dukgkpmqw/image/upload",
-        data: formData,
+      if (!context.mounted) return;
+      ref.invalidate(userRoleProvider); // Refresh the UI immediately
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Фото успешно сохранено на рабочем сервере'),
+        ),
       );
-
-      if (response.statusCode == 200 && response.data['secure_url'] != null) {
-        final String imageUrl = response.data['secure_url'];
-
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          'photoUrl': imageUrl,
-        });
-
-        // FIX: Check context.mounted to satisfy the linting rule
-        if (!context.mounted) return;
-
-        ref.invalidate(userRoleProvider);
-
+    } catch (e) {
+      if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Фото успешно обновлено')));
+        ).showSnackBar(SnackBar(content: Text("Ошибка сервера: $e")));
       }
-    } catch (e) {
-      // FIX: Check context.mounted here as well
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Ошибка загрузки: $e")));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -681,17 +700,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                 ),
                 child: CircleAvatar(
-                  // ✅ FIX 1: Remove DateTime from the Key.
-                  // Only change the key if the URL itself changes.
-                  key: ValueKey(user.photoUrl),
+                  key: ValueKey(
+                    user.photoUrl,
+                  ), // Forces Flutter to rebuild when URL changes
                   radius: 40,
-                  backgroundColor: isDark ? Colors.white10 : Colors.black12,
                   backgroundImage:
-                      !_isUploading &&
-                          user.photoUrl != null &&
-                          user.photoUrl!.isNotEmpty
-                      // ✅ FIX 2: Remove ?v= timestamp here.
-                      // Since Cloudinary now generates unique IDs, we don't need to force a reload on every build.
+                      user.photoUrl != null && user.photoUrl!.isNotEmpty
                       ? NetworkImage(user.photoUrl!)
                       : null,
                   child: _isUploading
@@ -713,23 +727,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               Positioned(
                 bottom: 4,
                 right: 4,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _updateProfilePicture(context, user.uid),
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color:
-                          cardColor, // This creates the "gap" between the photo and the blue button
-                      shape: BoxShape.circle,
-                    ),
-                    child: CircleAvatar(
-                      radius: 12,
-                      backgroundColor: blue,
-                      child: const Icon(
-                        Icons.camera_alt,
-                        size: 14,
-                        color: Colors.white,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _updateProfilePicture(context, user.uid),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: cardColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: CircleAvatar(
+                        radius: 12,
+                        backgroundColor: proColors
+                            .accentAction, // Using your pro theme color
+                        child: const Icon(
+                          Icons.camera_alt,
+                          size: 14,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),

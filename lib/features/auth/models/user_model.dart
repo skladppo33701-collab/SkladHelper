@@ -36,7 +36,7 @@ class AppUser {
       role: mappedRole,
       ppo: data['ppo'] ?? '33701',
       telegramId: data['telegramId'],
-      photoUrl: data['photo_url'], // ✅ Map from Firestore
+      photoUrl: data['photoUrl'],
     );
   }
 }
