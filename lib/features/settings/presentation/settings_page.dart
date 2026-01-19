@@ -274,26 +274,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _updateProfilePicture(BuildContext context, String uid) async {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final proColors = theme.extension<SkladColors>()!; // Use professional theme
+    final proColors = theme.extension<SkladColors>()!;
 
     final picker = ImagePicker();
-
-    // 1. Safe pick: Checks if user cancels the gallery
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 50, // Optimize image size
+      imageQuality: 50,
     );
 
-    if (image == null) return; // Stop if cancelled
+    if (image == null) return;
 
-    // 2. Cropping with theme-consistent UI
     final croppedFile = await ImageCropper().cropImage(
       sourcePath: image.path,
       aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: 'Редактировать',
-          toolbarColor: proColors.surfaceLow, // Use theme color
+          toolbarColor: proColors.surfaceLow,
           toolbarWidgetColor: Colors.white,
           activeControlsWidgetColor: proColors.accentAction,
           initAspectRatio: CropAspectRatioPreset.square,
@@ -314,7 +311,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     try {
       final dio = Dio();
-      // FIX: Added timeout to prevent infinite spinning if network is bad
       dio.options.connectTimeout = const Duration(seconds: 10);
       dio.options.receiveTimeout = const Duration(seconds: 10);
 
@@ -338,8 +334,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           'photoUrl': imageUrl,
         });
 
-        // FIX: Always check mounted before calling ref or context-based UI
-        if (!mounted) return;
+        // FIX: Check context.mounted to satisfy the linting rule
+        if (!context.mounted) return;
+
         ref.invalidate(userRoleProvider);
 
         ScaffoldMessenger.of(
@@ -347,11 +344,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ).showSnackBar(const SnackBar(content: Text('Фото успешно обновлено')));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Ошибка загрузки: $e")));
-      }
+      // FIX: Check context.mounted here as well
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Ошибка загрузки: $e")));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
