@@ -221,7 +221,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           title: DialogUtils.buildUnifiedHeader(
             icon: Icons.person_outline,
             title: 'Изменить имя и фамилию',
-            accentColor: proColors.accentAction,
+            color: proColors.accentAction,
+            colors: colors,
             textTheme: textTheme,
           ),
           content: Column(
@@ -298,15 +299,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               children: [
                 Expanded(
                   child: DialogUtils.buildDialogAction(
+                    context: context,
                     text: 'Отмена',
                     onTap: () => Navigator.pop(context),
                     isPrimary: false,
+                    colors: colors,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: DialogUtils.buildDialogAction(
-                    text: 'Отправить', // or 'Сохранить' for name
+                    context: context,
+                    text: 'Отправить',
                     onTap: () async {
                       final newName = controller.text.trim();
                       if (newName.isNotEmpty && newName != currentName) {
@@ -317,7 +321,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               .doc(uid)
                               .update({'name': newName});
 
-                          ref.invalidate(userRoleProvider); // refresh user data
+                          ref.invalidate(userRoleProvider);
 
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -332,6 +336,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       }
                     },
                     isPrimary: true,
+                    colors: colors,
                     color: proColors.accentAction,
                   ),
                 ),

@@ -1,9 +1,9 @@
-// lib/shared/widgets/dialog_utils.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
 
 class DialogUtils {
+  // --- MAIN DIALOG FUNCTION ---
   static Future<void> showSkladDialog({
     required BuildContext context,
     required String title,
@@ -15,126 +15,154 @@ class DialogUtils {
     VoidCallback? onSecondaryTap,
     bool showWarning = false,
     String? warningText,
-    Color? accentColorOverride, // optional for success dialogs etc.
+    Color? accentColorOverride, // FIXED: Added this parameter
   }) async {
     final proColors = Theme.of(context).extension<SkladColors>()!;
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final textTheme = theme.textTheme;
-
-    final accent = accentColorOverride ?? proColors.accentAction;
+    final accentColor = accentColorOverride ?? proColors.accentAction;
 
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: proColors.surfaceLow, // ← FIXED: use theme value
+        backgroundColor: const Color(0xFF1E293B),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(28),
-          side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         titlePadding: EdgeInsets.zero,
-        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        // FIXED: Using public method with named parameters
         title: buildUnifiedHeader(
           icon: icon,
           title: title,
-          accentColor: accent,
+          color: accentColor,
+          colors: colors,
           textTheme: textTheme,
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            content,
+            if (showWarning) ...[
+              const SizedBox(height: 20),
+              // FIXED: Using the internal helper
+              _buildWarningBox(proColors, textTheme, warningText),
+            ],
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        actions: [
+          Column(
             children: [
-              content,
-              if (showWarning) ...[
-                const SizedBox(height: 20),
-                _buildWarningBox(
-                  text:
-                      warningText ??
-                      'Если вы не видите письма, обязательно проверьте папку "Спам".',
-                  proColors: proColors,
-                  textTheme: textTheme,
+              // FIXED: Using public method with named parameters
+              buildDialogAction(
+                context: context,
+                text: primaryButtonText,
+                onTap: onPrimaryTap,
+                isPrimary: true,
+                color: accentColor,
+                colors: colors,
+              ),
+              if (secondaryButtonText != null) ...[
+                const SizedBox(height: 12),
+                buildDialogAction(
+                  context: context,
+                  text: secondaryButtonText,
+                  onTap: onSecondaryTap ?? () => Navigator.pop(context),
+                  isPrimary: false,
+                  colors: colors,
                 ),
               ],
             ],
           ),
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        actions: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Expanded(
-                child: buildDialogAction(
-                  text: secondaryButtonText ?? 'Отмена',
-                  onTap: onSecondaryTap ?? () => Navigator.pop(context),
-                  isPrimary: false,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: buildDialogAction(
-                  text: primaryButtonText,
-                  onTap: onPrimaryTap,
-                  isPrimary: true,
-                  color: accent,
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 
+  // --- PUBLIC HELPER 1: HEADER ---
+  // Renamed from _buildUnifiedHeader to buildUnifiedHeader
   static Widget buildUnifiedHeader({
     required IconData icon,
     required String title,
-    required Color accentColor,
+    required Color color,
+    required ColorScheme colors,
     required TextTheme textTheme,
   }) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(
-        24,
-        20,
-        24,
-        16,
-      ), // ↓ reduced top padding from 32→20
+      padding: const EdgeInsets.symmetric(vertical: 24),
       decoration: BoxDecoration(
-        color: accentColor.withValues(alpha: 0.08),
+        color: colors.onSurface.withValues(alpha: 0.04),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center, // center vertically
         children: [
-          Icon(icon, color: accentColor, size: 36), // slightly smaller icon
-          const SizedBox(height: 8), // tight spacing
+          Icon(icon, color: color, size: 32),
+          const SizedBox(height: 12),
           Text(
             title,
-            style:
-                textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: accentColor,
-                ) ??
-                TextStyle(
-                  color: accentColor,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
           ),
         ],
       ),
     );
   }
 
-  static Widget _buildWarningBox({
+  // --- PUBLIC HELPER 2: ACTION BUTTON ---
+  // Renamed from _buildDialogAction to buildDialogAction
+  static Widget buildDialogAction({
+    required BuildContext context,
     required String text,
-    required SkladColors proColors,
-    required TextTheme textTheme,
+    required VoidCallback onTap,
+    required bool isPrimary,
+    required ColorScheme colors,
+    Color? color,
   }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: isPrimary
+          ? ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 0,
+              ),
+              onPressed: onTap,
+              child: Text(
+                text,
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              ),
+            )
+          : OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                side: const BorderSide(color: Colors.white12),
+              ),
+              onPressed: onTap,
+              child: Text(text, style: GoogleFonts.inter()),
+            ),
+    );
+  }
+
+  // --- PRIVATE HELPER: WARNING BOX ---
+  static Widget _buildWarningBox(
+    SkladColors proColors,
+    TextTheme textTheme,
+    String? text,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -148,63 +176,12 @@ class DialogUtils {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              text,
+              text ?? 'Проверьте папку "Спам", если письмо не пришло.',
               style: textTheme.bodySmall?.copyWith(color: proColors.warning),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  static Widget buildDialogAction({
-    // ← rename to match what you use
-    required String text,
-    required VoidCallback onTap,
-    required bool isPrimary,
-    Color? color,
-    bool isDestructive = false,
-  }) {
-    final effectiveColor = isDestructive
-        ? Colors.redAccent
-        : (color ?? Colors.blueAccent);
-
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: isPrimary
-          ? ElevatedButton(
-              onPressed: onTap,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: effectiveColor,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              child: Text(
-                text,
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-              ),
-            )
-          : OutlinedButton(
-              onPressed: onTap,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: isDestructive
-                    ? Colors.redAccent
-                    : Colors.white70,
-                side: BorderSide(
-                  color: isDestructive
-                      ? Colors.redAccent.withValues(alpha: 0.5)
-                      : Colors.white12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              child: Text(text, style: GoogleFonts.inter()),
-            ),
     );
   }
 }
