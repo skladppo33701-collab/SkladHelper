@@ -7,6 +7,7 @@ import 'package:sklad_helper_33701/features/inventory/presentation/planner_page.
 import 'package:sklad_helper_33701/features/settings/presentation/settings_page.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
 import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
+import 'package:sklad_helper_33701/core/providers/navigation_provider.dart';
 
 class ManagerDashboard extends ConsumerStatefulWidget {
   const ManagerDashboard({super.key});
@@ -16,8 +17,6 @@ class ManagerDashboard extends ConsumerStatefulWidget {
 }
 
 class _ManagerDashboardState extends ConsumerState<ManagerDashboard> {
-  int _currentIndex = 0;
-
   final List<Widget> _screens = [
     const InventoryPage(),
     const PlannerPage(),
@@ -28,30 +27,22 @@ class _ManagerDashboardState extends ConsumerState<ManagerDashboard> {
   @override
   void initState() {
     super.initState();
-    // Start listening for role changes immediately
     _listenToRoleChanges();
   }
 
   void _listenToRoleChanges() {
-    // 1. Get current user safely
     final userState = ref.read(authStateProvider);
     final user = userState.value;
-
     if (user == null) return;
 
-    // 2. Listen to Firestore document changes
     FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .snapshots()
         .listen((snapshot) {
           if (snapshot.exists && mounted) {
-            final role = snapshot.data()?['role'];
-
-            // 3. Security Check: If not a manager anymore, invalidate auth
-            if (role != 'manager') {
+            if (snapshot.data()?['role'] != 'manager') {
               ref.invalidate(authStateProvider);
-              // This will trigger the main.dart AuthGate to redirect them
             }
           }
         });
@@ -59,8 +50,10 @@ class _ManagerDashboardState extends ConsumerState<ManagerDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final currentIndex = ref.watch(navigationIndexProvider);
     final proColors = Theme.of(context).extension<SkladColors>()!;
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Theme(
       data: theme.copyWith(splashFactory: NoSplash.splashFactory),
@@ -70,26 +63,29 @@ class _ManagerDashboardState extends ConsumerState<ManagerDashboard> {
           transitionBuilder: (Widget child, Animation<double> animation) {
             return FadeTransition(opacity: animation, child: child);
           },
-          child: _screens[_currentIndex],
+          child: _screens[currentIndex],
         ),
         bottomNavigationBar: NavigationBarTheme(
           data: NavigationBarThemeData(
-            backgroundColor: proColors.surfaceLow,
-            indicatorColor: proColors.accentAction.withValues(alpha: 0.1),
-            labelTextStyle: WidgetStatePropertyAll(
-              TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.white.withValues(alpha: 0.7),
-              ),
-            ),
+            // 1. Hide default labels so we can render our own inside the container
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+            // 2. Hide default indicator so we can build a custom one
+            indicatorColor: Colors.transparent,
           ),
           child: NavigationBar(
             height: 70,
-            elevation: 0,
-            selectedIndex: _currentIndex,
-            onDestinationSelected: (index) =>
-                setState(() => _currentIndex = index),
+            elevation: 10,
+            shadowColor: Colors.black26,
+
+            // Dark Mode: Dark Slate (Visible against black). Light Mode: White.
+            backgroundColor: isDark
+                ? const Color(0xFF1E293B)
+                : proColors.surfaceHigh,
+
+            selectedIndex: currentIndex,
+            onDestinationSelected: (index) {
+              ref.read(navigationIndexProvider.notifier).setIndex(index);
+            },
             destinations: [
               _buildCustomItem(
                 0,
@@ -97,6 +93,7 @@ class _ManagerDashboardState extends ConsumerState<ManagerDashboard> {
                 Icons.inventory_2,
                 'Склад',
                 proColors,
+                isDark,
               ),
               _buildCustomItem(
                 1,
@@ -104,6 +101,7 @@ class _ManagerDashboardState extends ConsumerState<ManagerDashboard> {
                 Icons.calendar_today,
                 'Планнер',
                 proColors,
+                isDark,
               ),
               _buildCustomItem(
                 2,
@@ -111,6 +109,7 @@ class _ManagerDashboardState extends ConsumerState<ManagerDashboard> {
                 Icons.smart_toy,
                 'Бот',
                 proColors,
+                isDark,
               ),
               _buildCustomItem(
                 3,
@@ -118,6 +117,7 @@ class _ManagerDashboardState extends ConsumerState<ManagerDashboard> {
                 Icons.settings,
                 'Настройки',
                 proColors,
+                isDark,
               ),
             ],
           ),
@@ -126,17 +126,71 @@ class _ManagerDashboardState extends ConsumerState<ManagerDashboard> {
     );
   }
 
-  Widget _buildCustomItem(
+  NavigationDestination _buildCustomItem(
     int index,
     IconData icon,
     IconData selectedIcon,
     String label,
     SkladColors proColors,
+    bool isDark,
   ) {
+    // Small text style
+    final textStyle = TextStyle(
+      fontSize: 10,
+      fontWeight: FontWeight.w600,
+      color: isDark ? Colors.white : Colors.black87,
+    );
+
     return NavigationDestination(
-      icon: Icon(icon, color: Colors.white.withValues(alpha: 0.5)),
-      selectedIcon: Icon(selectedIcon, color: proColors.accentAction),
-      label: label,
+      label: '', // Hidden via Theme, but kept empty here to be safe
+      // 3. UNSELECTED STATE (No Background)
+      icon: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 22,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.5)
+                : Colors.black54,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: textStyle.copyWith(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.5)
+                  : Colors.black54,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+
+      // 4. SELECTED STATE (Custom Container Background covering EVERYTHING)
+      selectedIcon: Container(
+        width: double.infinity,
+        margin: EdgeInsets.symmetric(horizontal: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          // This is your "Indicator" color
+          color: proColors.accentAction.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(selectedIcon, size: 22, color: proColors.accentAction),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: textStyle.copyWith(color: proColors.accentAction),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -11,7 +11,11 @@ class SkladColors extends ThemeExtension<SkladColors> {
   final Color onAccent; // Text on accent color
   final Color success; // Positive feedback
   final Color warning; // Caution feedback
-  final Color error; // Negative feedback
+  final Color error;
+
+  // --- ADDED MISSING COLORS ---
+  final Color contentPrimary; // Main text color (Titles, strong text)
+  final Color contentSecondary; // Secondary text color (Subtitles, hints)
 
   SkladColors({
     required this.accentAction,
@@ -23,6 +27,8 @@ class SkladColors extends ThemeExtension<SkladColors> {
     required this.success,
     required this.warning,
     required this.error,
+    required this.contentPrimary,
+    required this.contentSecondary,
   });
 
   @override
@@ -36,6 +42,8 @@ class SkladColors extends ThemeExtension<SkladColors> {
     Color? success,
     Color? warning,
     Color? error,
+    Color? contentPrimary,
+    Color? contentSecondary,
   }) {
     return SkladColors(
       accentAction: accentAction ?? this.accentAction,
@@ -47,6 +55,8 @@ class SkladColors extends ThemeExtension<SkladColors> {
       success: success ?? this.success,
       warning: warning ?? this.warning,
       error: error ?? this.error,
+      contentPrimary: contentPrimary ?? this.contentPrimary,
+      contentSecondary: contentSecondary ?? this.contentSecondary,
     );
   }
 
@@ -63,49 +73,50 @@ class SkladColors extends ThemeExtension<SkladColors> {
       success: Color.lerp(success, other.success, t)!,
       warning: Color.lerp(warning, other.warning, t)!,
       error: Color.lerp(error, other.error, t)!,
+      contentPrimary: Color.lerp(contentPrimary, other.contentPrimary, t)!,
+      contentSecondary: Color.lerp(
+        contentSecondary,
+        other.contentSecondary,
+        t,
+      )!,
     );
   }
 }
 
 /// Global theme constants
-const proIndigo = Color(0xFF6366F1); // Your original indigo, but can change
+const proIndigo = Color(0xFF6366F1);
 
 class SkladTheme {
-  // Dark Theme (subtle, calm like Apple Music/Spotify dark mode)
+  // Dark Theme
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(
-        0xFF0B0F1A,
-      ), // Deep neutral blue-gray
+      scaffoldBackgroundColor: const Color(0xFF0B0F1A),
       primaryColor: proIndigo,
       extensions: <ThemeExtension<dynamic>>[
         SkladColors(
           accentAction: proIndigo,
-          accentSecondary: proIndigo.withValues(alpha: 0.6), // Subtle variant
-          surfaceHigh: const Color(0xFF1F2937), // Elevated cards
-          surfaceLow: const Color(0xFF111827), // Backgrounds
-          neutralGray: const Color(0xFF6B7280), // Subtle text/dividers
+          accentSecondary: proIndigo.withValues(alpha: 0.6),
+          surfaceHigh: const Color(0xFF1F2937),
+          surfaceLow: const Color(0xFF111827),
+          neutralGray: const Color(0xFF6B7280),
           onAccent: Colors.white,
           success: const Color(0xFF10B981),
           warning: const Color(0xFFF59E0B),
           error: const Color(0xFFEF4444),
+          // --- DEFINED DARK TEXT COLORS ---
+          contentPrimary: Colors.white,
+          contentSecondary: Colors.white.withValues(alpha: 0.7),
         ),
       ],
-      colorScheme:
-          ColorScheme.fromSeed(
-            seedColor: proIndigo,
-            brightness: Brightness.dark,
-            surface: const Color(0xFF1F2937), // Neutral surface
-            onSurface: Colors.white70, // Subtle text
-            error: const Color(0xFFEF4444),
-          ).copyWith(
-            secondary: const Color(
-              0xFF6B7280,
-            ), // Neutral secondary for calm feel
-          ),
-      // App-wide styles for consistency
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: proIndigo,
+        brightness: Brightness.dark,
+        surface: const Color(0xFF1F2937),
+        onSurface: Colors.white70,
+        error: const Color(0xFFEF4444),
+      ).copyWith(secondary: const Color(0xFF6B7280)),
       appBarTheme: const AppBarTheme(
         backgroundColor: Color(0xFF0B0F1A),
         elevation: 0,
@@ -139,11 +150,11 @@ class SkladTheme {
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: const Color(0xFF6B7280), width: 1.0),
+          borderSide: const BorderSide(color: Color(0xFF6B7280), width: 1.0),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: proIndigo, width: 1.5),
+          borderSide: const BorderSide(color: proIndigo, width: 1.5),
         ),
         hintStyle: const TextStyle(color: Colors.white60),
         contentPadding: const EdgeInsets.symmetric(
@@ -165,7 +176,7 @@ class SkladTheme {
     );
   }
 
-  // Light Theme (similar structure for consistency)
+  // Light Theme
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
@@ -174,10 +185,8 @@ class SkladTheme {
       primaryColor: proIndigo,
       navigationBarTheme: NavigationBarThemeData(
         height: 70,
-        backgroundColor: const Color(
-          0xFFF3F4F6,
-        ), // Slightly darker than background for visibility
-        indicatorColor: proIndigo.withValues(alpha: 0.15), // Subtle purple pill
+        backgroundColor: const Color(0xFFF3F4F6),
+        indicatorColor: proIndigo.withValues(alpha: 0.15),
         indicatorShape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -203,6 +212,9 @@ class SkladTheme {
           success: const Color(0xFF10B981),
           warning: const Color(0xFFF59E0B),
           error: const Color(0xFFEF4444),
+          // --- DEFINED LIGHT TEXT COLORS ---
+          contentPrimary: const Color(0xFF0F172A), // Slate 900
+          contentSecondary: const Color(0xFF64748B), // Slate 500
         ),
       ],
       colorScheme: ColorScheme.fromSeed(
@@ -210,7 +222,6 @@ class SkladTheme {
         brightness: Brightness.light,
         surface: Colors.white,
       ).copyWith(secondary: const Color(0xFF6B7280)),
-      // App-wide styles similar to dark (adjusted for light)
       appBarTheme: const AppBarTheme(
         backgroundColor: Color(0xFFF8FAFC),
         elevation: 0,
@@ -248,11 +259,11 @@ class SkladTheme {
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: const Color(0xFF6B7280), width: 1.0),
+          borderSide: const BorderSide(color: Color(0xFF6B7280), width: 1.0),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: proIndigo, width: 1.5),
+          borderSide: const BorderSide(color: proIndigo, width: 1.5),
         ),
         hintStyle: const TextStyle(color: Colors.black54),
         contentPadding: const EdgeInsets.symmetric(

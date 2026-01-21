@@ -10,6 +10,7 @@ import 'package:sklad_helper_33701/shared/widgets/dialog_utils.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:dio/dio.dart';
+import 'package:sklad_helper_33701/features/inventory/providers/task_stats_provider.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -367,6 +368,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
+              key: const PageStorageKey('settings_scroll_key'),
               padding: const EdgeInsets.symmetric(vertical: 24),
               children: [
                 _buildProfileHeader(context, user, isDark, colors.primary),
@@ -507,15 +509,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     BuildContext context,
     AppUser user,
     bool isDark,
-    Color primary, // pass colors.primary
+    Color primary,
   ) {
-    final colors = Theme.of(context).colorScheme;
     final proColors = Theme.of(context).extension<SkladColors>()!;
-    final cardColor = proColors.surfaceHigh; // from theme
+    final colors = Theme.of(context).colorScheme;
+    final cardColor = proColors.surfaceHigh;
     final displayName = user.name.isNotEmpty ? user.name : "Пользователь";
-    final dividerColor = proColors.neutralGray.withValues(
-      alpha: 0.1,
-    ); // from theme
+    final dividerColor = proColors.neutralGray.withValues(alpha: 0.1);
+
+    // 1. WATCH THE REAL-TIME TASK COUNT
+    final taskCountAsync = ref.watch(taskCountProvider);
+    final taskCountString = taskCountAsync.when(
+      data: (taskTotal) => taskTotal.toString(),
+      loading: () => '...',
+
+      error: (err, _) => '0',
+    );
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -573,8 +582,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             : null),
                 ),
               ),
-
-              // Camera Button with its own small "cutout" border
               Positioned(
                 bottom: 4,
                 right: 4,
@@ -583,17 +590,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   child: InkWell(
                     onTap: () {
                       final uid = FirebaseAuth.instance.currentUser?.uid;
-                      if (uid != null) {
-                        _updateProfilePicture(context, uid);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Не удалось получить ID пользователя',
-                            ),
-                          ),
-                        );
-                      }
+                      if (uid != null) _updateProfilePicture(context, uid);
                     },
                     borderRadius: BorderRadius.circular(20),
                     child: Container(
@@ -618,11 +615,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
           const SizedBox(height: 16),
-          // --- NAME SECTION (WITH EDIT ICON) ---
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const SizedBox(width: 32), // Spacer to balance the edit icon
+              const SizedBox(width: 32),
               Text(
                 displayName,
                 style: TextStyle(
@@ -647,7 +643,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             style: TextStyle(color: proColors.neutralGray, fontSize: 13),
           ),
           const SizedBox(height: 16),
-          // --- ROLE BADGE ---
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
@@ -673,28 +668,44 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           const SizedBox(height: 20),
           Divider(height: 1, color: dividerColor),
+
           // --- STATS BAR ---
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16.0),
             child: IntrinsicHeight(
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildStatItem(
-                    'Сканы',
-                    '1.2k',
-                    proColors.accentAction,
-                    isDark,
+                  // 1. Scans
+                  Expanded(
+                    child: _buildStatItem(
+                      'Сканы',
+                      '--', // TODO: Implement real scanning logic
+                      proColors.accentAction,
+                      isDark,
+                    ),
                   ),
                   VerticalDivider(width: 1, thickness: 1, color: dividerColor),
-                  _buildStatItem(
-                    'Задачи',
-                    '42',
-                    proColors.accentAction,
-                    isDark,
+
+                  // 2. Tasks (Real Data)
+                  Expanded(
+                    child: _buildStatItem(
+                      'Задачи',
+                      taskCountString,
+                      proColors.accentAction,
+                      isDark,
+                    ),
                   ),
                   VerticalDivider(width: 1, thickness: 1, color: dividerColor),
-                  _buildStatItem('Ранг', 'A', proColors.accentAction, isDark),
+
+                  // 3. Activity
+                  Expanded(
+                    child: _buildStatItem(
+                      'Активность',
+                      '--', // TODO: Implement activity metric
+                      proColors.accentAction,
+                      isDark,
+                    ),
+                  ),
                 ],
               ),
             ),
