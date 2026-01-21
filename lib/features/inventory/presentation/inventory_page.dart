@@ -4,9 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-// REMOVED: import 'dart:convert'; (Unused)
 import '../providers/inventory_provider.dart';
 import '../models/inventory_item.dart';
+import 'scanner_page.dart'; // FIX: Import the scanner page
 
 class InventoryPage extends ConsumerStatefulWidget {
   const InventoryPage({super.key});
@@ -28,18 +28,21 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
       if (result != null) {
         File file = File(result.files.single.path!);
         String csvContent = await file.readAsString();
-
-        // Logic doesn't need context, so it's safe here
         ref.read(inventoryProvider.notifier).parseCsvData(csvContent);
       }
     } catch (e) {
-      // FIX: Check if widget is still in the tree before using context
       if (!mounted) return;
-
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error loading file: $e')));
     }
+  }
+
+  // Helper to open Scanner
+  void _openScanner() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ScannerPage()));
   }
 
   @override
@@ -71,7 +74,6 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
               ),
               child: Column(
                 children: [
-                  // Title Row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -102,7 +104,6 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Search Bar
                   TextField(
                     controller: _searchController,
                     onChanged: (val) =>
@@ -122,9 +123,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                           Icons.qr_code_scanner,
                           color: proColors.accentAction,
                         ),
-                        onPressed: () {
-                          // TODO: Connect QR Scanner logic here
-                        },
+                        onPressed: _openScanner, // FIX: Connect Logic
                       ),
                       filled: true,
                       fillColor: isDark
@@ -144,7 +143,6 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
               ),
             ),
 
-            // 2. STATISTICS / FILTER CHIPS
             if (invState.allItems.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -168,7 +166,6 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                 ),
               ),
 
-            // 3. LIST OF ITEMS
             Expanded(
               child: invState.isLoading
                   ? Center(

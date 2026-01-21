@@ -1,45 +1,49 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sklad_helper_33701/features/auth/models/user_model.dart';
-import 'package:flutter/foundation.dart';
 
-// 1. Watching the raw Firebase Auth state
+import '../models/user_model.dart';
+
+/// 🔐 Firebase auth state
 final authStateProvider = StreamProvider<User?>((ref) {
   return FirebaseAuth.instance.authStateChanges();
 });
 
-// 2. Fetches the User Role from Firestore with live updates
+/// 👤 Firestore user + role
 final userRoleProvider = StreamProvider<AppUser?>((ref) {
-  final authUser = ref.watch(authStateProvider).value;
-
-  if (authUser == null) {
-    return Stream.value(null);
-  }
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return const Stream.empty();
 
   return FirebaseFirestore.instance
       .collection('users')
-      .doc(authUser.uid)
+      .doc(user.uid)
       .snapshots()
       .map((doc) {
         if (!doc.exists || doc.data() == null) return null;
-        return AppUser.fromMap(doc.data()!, authUser.uid);
+        return AppUser.fromMap(doc.data()!, user.uid);
       });
 });
 
 enum AuthStatus { idle, loading, authenticated, error }
 
 class AuthNotifier extends Notifier<AuthStatus> {
-  // v7+ uses a Singleton, so we don't instantiate it with 'new'
-  final _googleSignIn = GoogleSignIn.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
   @override
   AuthStatus build() {
     return AuthStatus.idle;
   }
 
-  // --- SIGN IN (Email/Password) ---
+  /// 🔧 REQUIRED for v7 (call once at app start)
+  Future<void> initGoogle() async {
+    await _googleSignIn.initialize(
+      clientId: kIsWeb ? 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com' : null,
+    );
+  }
+
+  /// 📧 Email login
   Future<String?> signIn(String email, String password) async {
     state = AuthStatus.loading;
     try {
@@ -49,79 +53,50 @@ class AuthNotifier extends Notifier<AuthStatus> {
       );
       state = AuthStatus.authenticated;
       return null;
-    } on FirebaseAuthException catch (e) {
-      state = AuthStatus.error;
-      if (e.code == 'user-not-found') return 'Пользователь не найден';
-      if (e.code == 'wrong-password') return 'Неверный пароль';
-      return 'Ошибка входа: ${e.message}';
     } catch (e) {
       state = AuthStatus.error;
-      return 'Произошла ошибка';
+      return e.toString();
     }
   }
 
-  // --- SIGN UP (Email/Password) ---
+  /// 🆕 Email signup
   Future<String?> signUp(String email, String password) async {
     state = AuthStatus.loading;
     try {
-      final userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-      if (userCredential.user != null) {
-        await userCredential.user!.sendEmailVerification();
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .set({
-              'email': email,
-              'role': 'pending',
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-        ref.invalidate(userRoleProvider);
-      }
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(cred.user!.uid)
+          .set({
+            'email': email,
+            'role': 'loader',
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
       state = AuthStatus.authenticated;
       return null;
     } catch (e) {
       state = AuthStatus.error;
-      return 'Ошибка регистрации';
+      return e.toString();
     }
   }
 
-  // --- GOOGLE SIGN IN (Corrected for v7+) ---
-  // --- GOOGLE SIGN IN (Corrected for v7+) ---
+  /// 🔵 Google Sign-In (OFFICIAL v7 FLOW)
   Future<void> signInWithGoogle() async {
     state = AuthStatus.loading;
+
     try {
-      // 1. Initialize (Required in v7)
-      // CHANGE THIS SECTION:
-      await _googleSignIn.initialize(
-        clientId: kIsWeb
-            ? 'YOUR_NEW_CLIENT_ID.apps.googleusercontent.com' // <--- Paste here
-            : null,
-      );
+      final account = await _googleSignIn.authenticate();
 
-      // 2. Authenticate
-      final googleUser = await _googleSignIn.authenticate(
-        scopeHint: ['email', 'profile'],
-      );
+      final auth = account.authentication;
 
-      // 3. Get Access Token (FIX: Must usage authorizeScopes now)
-      final authResponse = await googleUser.authorizationClient.authorizeScopes(
-        ['email', 'profile'],
-      );
-      final accessToken = authResponse.accessToken;
+      // ✅ v7 ONLY supports idToken
+      final credential = GoogleAuthProvider.credential(idToken: auth.idToken);
 
-      // 4. Get ID Token (FIX: Still available on authentication property)
-      final googleAuth = googleUser.authentication;
-      final idToken = googleAuth.idToken;
-
-      // 5. Create Credential
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: accessToken, // From authorizationClient
-        idToken: idToken, // From authentication
-      );
-
-      // 6. Firebase Sign In
       final userCredential = await FirebaseAuth.instance.signInWithCredential(
         credential,
       );
@@ -140,12 +115,11 @@ class AuthNotifier extends Notifier<AuthStatus> {
 
       state = AuthStatus.authenticated;
     } catch (e) {
-      // Cancellation or error triggers this
       state = AuthStatus.error;
-      debugPrint("Google Sign In Error: $e");
     }
   }
 
+  /// 🚪 Logout
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     await FirebaseAuth.instance.signOut();
@@ -153,6 +127,6 @@ class AuthNotifier extends Notifier<AuthStatus> {
   }
 }
 
-final authProvider = NotifierProvider<AuthNotifier, AuthStatus>(() {
-  return AuthNotifier();
-});
+final authProvider = NotifierProvider<AuthNotifier, AuthStatus>(
+  () => AuthNotifier(),
+);

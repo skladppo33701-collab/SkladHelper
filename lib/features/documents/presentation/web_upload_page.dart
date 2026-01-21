@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:file_picker/file_picker.dart';
-import 'package:dotted_border/dotted_border.dart'; // Add dotted_border to pubspec.yaml for the UI effect
 import 'package:sklad_helper_33701/core/theme.dart';
-import '../services/excel_service.dart'; // Make sure this file exists from previous steps
+import 'dart:ui'; // Required for PathMetric
+import '../services/document_service.dart';
 
 class WebUploadPage extends StatefulWidget {
   const WebUploadPage({super.key});
@@ -15,22 +14,25 @@ class WebUploadPage extends StatefulWidget {
 class _WebUploadPageState extends State<WebUploadPage> {
   PlatformFile? _pickedFile;
   bool _isUploading = false;
-  String _docType = 'auto'; // 'auto', 'rot', 'pot'
+  String _docType = 'auto';
 
-  final ExcelService _excelService = ExcelService();
+  final DocumentService _documentService = DocumentService();
 
   Future<void> _pickFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['xlsx', 'xls'],
-        withData: true, // IMPORTANT: Required for Web to get bytes
+        allowedExtensions: ['xlsx', 'xls', 'pdf'],
+        withData: true,
       );
-
+      final documentService = DocumentService(); // Use new service name
+      await documentService.processUpload(
+        _pickedFile!.bytes!,
+        _pickedFile!.name,
+      );
       if (result != null) {
         setState(() {
           _pickedFile = result.files.first;
-          // Auto-detect type from filename
           if (_pickedFile!.name.toLowerCase().contains('rot')) {
             _docType = 'rot';
           } else if (_pickedFile!.name.toLowerCase().contains('pot')) {
@@ -39,6 +41,7 @@ class _WebUploadPageState extends State<WebUploadPage> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error picking file: $e')));
@@ -51,8 +54,8 @@ class _WebUploadPageState extends State<WebUploadPage> {
     setState(() => _isUploading = true);
 
     try {
-      // Pass the bytes directly to the service
-      await _excelService.uploadAndParseExcel(
+      // CHANGE THIS: Call processUpload instead of uploadAndParseExcel
+      await _documentService.processUpload(
         _pickedFile!.bytes!,
         _pickedFile!.name,
       );
@@ -61,17 +64,16 @@ class _WebUploadPageState extends State<WebUploadPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Файл успешно загружен и обработан')),
         );
-        setState(() => _pickedFile = null); // Reset
+        setState(() => _pickedFile = null);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка обработки: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка обработки: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -91,15 +93,12 @@ class _WebUploadPageState extends State<WebUploadPage> {
       ),
       body: Center(
         child: Container(
-          constraints: const BoxConstraints(
-            maxWidth: 600,
-          ), // Web-friendly width
+          constraints: const BoxConstraints(maxWidth: 600),
           padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. HEADER
               Text(
                 "Импорт накладных (Excel)",
                 textAlign: TextAlign.center,
@@ -117,21 +116,20 @@ class _WebUploadPageState extends State<WebUploadPage> {
               ),
               const SizedBox(height: 40),
 
-              // 2. DROP ZONE (Visual)
               InkWell(
                 onTap: _pickFile,
                 borderRadius: BorderRadius.circular(20),
-                child: DottedBorder(
-                  color: proColors.accentAction.withOpacity(0.5),
-                  strokeWidth: 2,
-                  dashPattern: const [8, 4],
-                  borderType: BorderType.RRect,
-                  radius: const Radius.circular(20),
+                child: CustomPaint(
+                  painter: _DashedBorderPainter(
+                    color: proColors.accentAction.withValues(alpha: 0.5),
+                    strokeWidth: 2,
+                    radius: 20,
+                  ),
                   child: Container(
                     height: 250,
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: proColors.surfaceHigh.withOpacity(0.5),
+                      color: proColors.surfaceHigh.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Column(
@@ -186,13 +184,13 @@ class _WebUploadPageState extends State<WebUploadPage> {
 
               const SizedBox(height: 32),
 
-              // 3. SETTINGS & ACTION
               if (_pickedFile != null) ...[
                 Row(
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _docType,
+                        key: ValueKey(_docType),
+                        initialValue: _docType, // Replaces 'value'
                         decoration: InputDecoration(
                           labelText: "Тип документа",
                           border: OutlineInputBorder(
@@ -248,4 +246,51 @@ class _WebUploadPageState extends State<WebUploadPage> {
       ),
     );
   }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final double radius;
+
+  _DashedBorderPainter({
+    required this.color,
+    this.strokeWidth = 2,
+    this.radius = 20,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final Path path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, size.width, size.height),
+          Radius.circular(radius),
+        ),
+      );
+
+    final Path dashedPath = Path();
+    double dashWidth = 8.0;
+    double dashSpace = 4.0;
+    double distance = 0.0;
+
+    for (final PathMetric measurePath in path.computeMetrics()) {
+      while (distance < measurePath.length) {
+        dashedPath.addPath(
+          measurePath.extractPath(distance, distance + dashWidth),
+          Offset.zero,
+        );
+        distance += dashWidth + dashSpace;
+      }
+    }
+    canvas.drawPath(dashedPath, paint);
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter oldDelegate) => false;
 }

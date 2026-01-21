@@ -6,6 +6,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in_web/google_sign_in_web.dart' as web;
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -213,6 +216,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildPillGoogleButton(SkladColors proColors) {
+    if (kIsWeb) {
+      return Center(
+        child: (GoogleSignInPlatform.instance as web.GoogleSignInPlugin).renderButton(
+          configuration: web.GSIButtonConfiguration(
+            shape: web.GSIButtonShape.pill,
+            // Fix: The enum constant is usually 'filledBlue' or 'filledBlack' or 'outline'
+            theme: web.GSIButtonTheme.outline,
+            // Fix: Width is often set via constraints or is implicit in newer versions
+          ),
+        ),
+      );
+    }
+
+    // Android/iOS Custom Button (Your existing code)
     return SizedBox(
       height: 56,
       child: OutlinedButton(

@@ -84,6 +84,7 @@ dependencies:
   # Authentication / Sign-in
   # ────────────────────────────────────────────────
   google_sign_in: ^7.2.0
+ 
 
   # ────────────────────────────────────────────────
   # Utilities / Platform Integration
@@ -94,7 +95,9 @@ dependencies:
   random_password_generator: ^0.2.1
   flutter_svg: ^2.2.3
   csv: ^6.0.0
-
+  syncfusion_flutter_pdf: ^32.1.24
+  google_identity_services_web: ^0.3.3+1
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter

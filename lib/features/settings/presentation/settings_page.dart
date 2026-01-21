@@ -517,14 +517,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final displayName = user.name.isNotEmpty ? user.name : "Пользователь";
     final dividerColor = proColors.neutralGray.withValues(alpha: 0.1);
 
-    // 1. WATCH THE REAL-TIME TASK COUNT
+    // 1. Providers
     final taskCountAsync = ref.watch(taskCountProvider);
-    final taskCountString = taskCountAsync.when(
-      data: (taskTotal) => taskTotal.toString(),
-      loading: () => '...',
+    final scansAsync = ref.watch(userScansProvider);
+    final rankAsync = ref.watch(activityRankProvider);
 
+    // 2. Resolve Values
+
+    final taskCountString = taskCountAsync.when(
+      data: (val) => val.toString(),
+      loading: () => '...',
       error: (err, _) => '0',
     );
+
+    final scansString = scansAsync.when(
+      data: (val) => val.toString(),
+      loading: () => '...',
+      error: (err, _) => '0',
+    );
+
+    final rankString = rankAsync.value ?? '-';
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -675,33 +687,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             child: IntrinsicHeight(
               child: Row(
                 children: [
-                  // 1. Scans
                   Expanded(
                     child: _buildStatItem(
                       'Сканы',
-                      '--', // TODO: Implement real scanning logic
+                      scansString, // Connected!
                       proColors.accentAction,
                       isDark,
                     ),
                   ),
                   VerticalDivider(width: 1, thickness: 1, color: dividerColor),
-
-                  // 2. Tasks (Real Data)
                   Expanded(
                     child: _buildStatItem(
                       'Задачи',
-                      taskCountString,
+                      taskCountString, // Connected!
                       proColors.accentAction,
                       isDark,
                     ),
                   ),
                   VerticalDivider(width: 1, thickness: 1, color: dividerColor),
-
-                  // 3. Activity
                   Expanded(
                     child: _buildStatItem(
                       'Активность',
-                      '--', // TODO: Implement activity metric
+                      rankString, // Connected!
                       proColors.accentAction,
                       isDark,
                     ),
