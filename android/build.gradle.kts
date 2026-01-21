@@ -1,3 +1,11 @@
+plugins {
+    id("com.android.application") version "8.11.1" apply false
+    id("com.google.gms.google-services") version "4.3.15" apply false 
+    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    
+    // REMOVED: dev.flutter.flutter-gradle-plugin
+}
+
 allprojects {
     repositories {
         google()
@@ -5,10 +13,7 @@ allprojects {
     }
 }
 
-val newBuildDir: Directory =
-    rootProject.layout.buildDirectory
-        .dir("../../build")
-        .get()
+val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
 rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {

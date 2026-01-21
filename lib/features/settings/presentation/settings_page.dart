@@ -4,11 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/providers/theme_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/models/user_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
-import 'package:dio/dio.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'package:sklad_helper_33701/shared/widgets/dialog_utils.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -19,112 +15,107 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  bool _isUploading = false;
+  final bool _isUploading = false;
 
-  // ───────────────── PASSWORD RESET DIALOG ─────────────────
+  // ───────────────── PASSWORD RESET FLOW ─────────────────
+
   Future<void> _showPasswordResetConfirmation(
     BuildContext context,
     String email,
   ) async {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final textTheme = theme.textTheme;
     final proColors = Theme.of(context).extension<SkladColors>()!;
 
-    return showDialog(
+    if (email.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Введите email для сброса')));
+      return;
+    }
+
+    await DialogUtils.showSkladDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: proColors.surfaceLow, // Replaces bgColor
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
-          side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        titlePadding: EdgeInsets.zero,
-        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-        title: _buildUnifiedHeader(
-          Icons.lock_reset_outlined,
-          'Сброс пароля',
-          proColors.accentAction,
-          colors,
-          textTheme,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Мы отправим ссылку для сброса пароля на вашу почту:',
+      title: 'Сброс пароля',
+      icon: Icons.lock_reset_outlined,
+      primaryButtonText: 'Отправить',
+      secondaryButtonText: 'Отмена',
+      showWarning: true,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Мы отправим ссылку для сброса пароля на вашу почту:',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Text(
+              email,
               textAlign: TextAlign.center,
-              style: textTheme.bodyMedium?.copyWith(
-                height: 1.4,
-                color: colors.onSurface.withValues(alpha: 0.7),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontSize: 16,
               ),
             ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: proColors.warning.withValues(
-                  alpha: 0.1,
-                ), // Replaces Colors.amber
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: proColors.warning.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: proColors.warning,
-                    size: 20,
-                  ), // Remove const
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Если вы не видите письма, обязательно проверьте папку "Спам".',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: proColors.warning,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        actions: [
-          Row(
-            children: [
-              Expanded(
-                child: _buildDialogAction(
-                  'Отмена',
-                  () => Navigator.pop(context),
-                  colors,
-                  isPrimary: false,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildDialogAction(
-                  'Отправить',
-                  () async {
-                    Navigator.pop(context); // Close the dialog
-                    await _sendPasswordReset(
-                      context,
-                      email,
-                    ); // This uses the function
-                  },
-                  colors,
-                  isPrimary: true,
-                  color: proColors.accentAction,
-                ),
-              ),
-            ],
           ),
         ],
       ),
+      onPrimaryTap: () async {
+        Navigator.pop(context);
+
+        try {
+          await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+          if (!context.mounted) return;
+
+          await DialogUtils.showSkladDialog(
+            context: context,
+            title: 'Письмо отправлено',
+            icon: Icons.mark_email_read_outlined,
+            primaryButtonText: 'Понятно',
+            accentColorOverride: proColors.success,
+            showWarning: true,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                const Text(
+                  'Инструкции по сбросу пароля были успешно отправлены на адрес:',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  email,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            onPrimaryTap: () => Navigator.pop(context),
+          );
+        } catch (e) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка: ${e.toString()}'),
+              backgroundColor: proColors.error,
+            ),
+          );
+        }
+      },
+      onSecondaryTap: () => Navigator.pop(context),
     );
   }
 
@@ -135,230 +126,182 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     bool isDark,
   ) async {
     final controller = TextEditingController(text: currentEmail);
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final textTheme = theme.textTheme;
     final proColors = Theme.of(context).extension<SkladColors>()!;
 
-    return showDialog(
+    await DialogUtils.showSkladDialog(
       context: context,
-      builder: (context) => Theme(
-        data: theme.copyWith(
-          textSelectionTheme: TextSelectionThemeData(
-            selectionHandleColor: proColors.accentAction,
-            selectionColor: proColors.accentAction.withValues(alpha: 0.2),
-            cursorColor: proColors.accentAction,
+      title: 'Изменение email',
+      icon: Icons.email_outlined,
+      primaryButtonText: 'Отправить',
+      secondaryButtonText: 'Отмена',
+      showWarning: true,
+      warningText:
+          'После отправки проверьте новый адрес — придёт письмо для подтверждения',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Введите новый адрес электронной почты',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
           ),
-        ),
-        child: AlertDialog(
-          backgroundColor: colors.surface,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-            side: BorderSide(
-              color: colors.outlineVariant.withValues(alpha: 0.5),
-            ),
-          ),
-          titlePadding: EdgeInsets.zero,
-          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-          title: _buildUnifiedHeader(
-            Icons.alternate_email_rounded,
-            'Изменить почту',
-            proColors.accentAction,
-            colors,
-            textTheme,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Введите новый адрес. Вам придет письмо для подтверждения.',
-                textAlign: TextAlign.center,
-                style: textTheme.bodyMedium?.copyWith(
-                  height: 1.4,
-                  color: colors.onSurface.withValues(alpha: 0.7),
-                ),
+          const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark ? Colors.white12 : Colors.black12,
               ),
-              const SizedBox(height: 20),
-              // Rounded Box exactly like Reset Password
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.black.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isDark ? Colors.white12 : Colors.black12,
-                  ),
-                ),
-                child: TextField(
-                  controller: controller,
-                  autofocus: true,
-                  textAlign: TextAlign.center,
-                  cursorColor: proColors.accentAction,
-                  style: textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: proColors.accentAction,
-                  ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    hintText: "example@mail.com",
-                  ),
-                ),
+            ),
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.done,
+              textAlign: TextAlign.center,
+              cursorColor: proColors.accentAction,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: proColors.accentAction,
+                fontSize: 16,
               ),
-            ],
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: "новый@email.com",
+              ),
+            ),
           ),
-          actionsAlignment: MainAxisAlignment.center,
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-          actions: [
-            _buildDialogAction(
-              'Отмена',
-              () => Navigator.pop(context),
-              colors,
-              isPrimary: false,
-            ),
-            const SizedBox(width: 12),
-            _buildDialogAction(
-              'Сохранить',
-              () async {
-                try {
-                  final user = FirebaseAuth.instance.currentUser;
-                  if (user != null) {
-                    // 1. Update Auth Email (Sends a verification email to the NEW address)
-                    await user.verifyBeforeUpdateEmail(controller.text.trim());
-
-                    // 2. Update Firestore document to keep data in sync
-                    await FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user.uid)
-                        .update({'email': controller.text.trim()});
-
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Проверьте новую почту для подтверждения',
-                        ),
-                      ),
-                    );
-                  }
-                } on FirebaseAuthException catch (e) {
-                  if (e.code == 'requires-recent-login') {
-                    // User needs to log out and back in to change email
-                    _showErrorSnackBar(
-                      context,
-                      'Требуется повторный вход в систему',
-                    );
-                  }
-                }
-              },
-              colors,
-              isPrimary: true,
-              color: proColors.accentAction,
-            ),
-          ],
-        ),
+        ],
       ),
+      onPrimaryTap: () async {
+        final newEmail = controller.text.trim();
+
+        if (newEmail.isEmpty || newEmail == currentEmail) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                newEmail.isEmpty
+                    ? 'Введите новый email'
+                    : 'Это ваш текущий адрес',
+              ),
+              backgroundColor: proColors.error,
+            ),
+          );
+          return;
+        }
+
+        Navigator.pop(context);
+
+        try {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user == null) {
+            throw Exception('Нет текущего пользователя');
+          }
+
+          // Modern safe method: sends verification to new email
+          await user.verifyBeforeUpdateEmail(newEmail);
+
+          // Optional: reload user to refresh local state
+          await user.reload();
+
+          if (!context.mounted) return;
+
+          // Success dialog
+          await DialogUtils.showSkladDialog(
+            context: context,
+            title: 'Проверьте новый email',
+            icon: Icons.mark_email_read_outlined,
+            primaryButtonText: 'Понятно',
+            accentColorOverride: proColors.success,
+            showWarning: true,
+            warningText:
+                'На новый адрес отправлено письмо с подтверждением.\nПосле клика по ссылке email обновится.',
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                const Text(
+                  'Письмо отправлено на:',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  newEmail,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            onPrimaryTap: () => Navigator.pop(context),
+          );
+
+          // Optional: update Firestore if you duplicate email there
+          // await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'email': newEmail});
+        } on FirebaseAuthException catch (e) {
+          if (!context.mounted) return;
+
+          String msg = 'Ошибка изменения email';
+          if (e.code == 'requires-recent-login') {
+            msg = 'Для безопасности войдите заново и повторите попытку';
+
+            // Show reauth prompt
+            final shouldReauth = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Требуется повторный вход'),
+                content: const Text('Чтобы изменить email, войдите заново.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Отмена'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.pop(ctx, true);
+                      await FirebaseAuth.instance.signOut();
+                    },
+                    child: const Text('Войти заново'),
+                  ),
+                ],
+              ),
+            );
+
+            if (shouldReauth == true && context.mounted) {
+              // Redirect to login screen (adjust route name)
+              Navigator.pushReplacementNamed(context, '/login');
+            }
+            return;
+          } else if (e.code == 'invalid-email') {
+            msg = 'Неверный формат email';
+          } else if (e.code == 'email-already-in-use') {
+            msg = 'Этот email уже занят';
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg), backgroundColor: proColors.error),
+          );
+        } catch (e) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Неизвестная ошибка: $e'),
+              backgroundColor: proColors.error,
+            ),
+          );
+        }
+      },
+      onSecondaryTap: () => Navigator.pop(context),
     );
-  }
-
-  Future<void> _updateProfilePicture(BuildContext context, String uid) async {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final proColors = theme.extension<SkladColors>()!;
-
-    final picker = ImagePicker();
-
-    // 1. PICK & EXTREME COMPRESSION (Saves Cloudinary Credits)
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 400,
-      maxHeight: 400,
-      imageQuality: 30, // Tiny file size (~50KB)
-    );
-
-    if (image == null) return;
-
-    // 2. CROP LOGIC (Defines croppedFile)
-    final CroppedFile? croppedFile = await ImageCropper().cropImage(
-      sourcePath: image.path,
-      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: 'Редактировать',
-          toolbarColor: proColors.surfaceLow,
-          toolbarWidgetColor: Colors.white,
-          activeControlsWidgetColor: proColors.accentAction,
-          initAspectRatio: CropAspectRatioPreset.square,
-          lockAspectRatio: true,
-          backgroundColor: isDark ? const Color(0xFF020617) : Colors.white,
-        ),
-        IOSUiSettings(
-          title: 'Редактировать',
-          cancelButtonTitle: 'Отмена',
-          doneButtonTitle: 'Готово',
-        ),
-      ],
-    );
-
-    // If user cancels crop, stop here
-    if (croppedFile == null) return;
-
-    setState(() => _isUploading = true);
-
-    try {
-      // 3. CLOUDINARY CONFIG
-      const String cloudName = "dukgkpmqw";
-      const String uploadPreset = "sklad_helper_preset";
-
-      FormData formData = FormData.fromMap({
-        "file": await MultipartFile.fromFile(croppedFile.path),
-        "upload_preset": uploadPreset,
-      });
-
-      // 4. UPLOAD TO CLOUDINARY
-      var response = await Dio().post(
-        "https://api.cloudinary.com/v1_1/$cloudName/image/upload",
-        data: formData,
-      );
-
-      if (response.statusCode == 200) {
-        final String secureUrl = response.data['secure_url'];
-
-        // 5. UPDATE FIRESTORE
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          'photoUrl': secureUrl,
-        });
-
-        // Clear cache here to show the new photo immediately
-        PaintingBinding.instance.imageCache.clear();
-        PaintingBinding.instance.imageCache.clearLiveImages();
-
-        if (!context.mounted) return;
-        ref.invalidate(userRoleProvider);
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Фото успешно сохранено')));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Ошибка загрузки: $e")));
-      }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
-    }
   }
 
   // --- CHANGING PROFILE NAME ---
@@ -376,7 +319,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return showDialog(
       context: context,
       builder: (context) => Theme(
-        // Force the selection handle and cursor to be Blue, not Purple
         data: theme.copyWith(
           textSelectionTheme: TextSelectionThemeData(
             selectionHandleColor: proColors.accentAction,
@@ -395,12 +337,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           titlePadding: EdgeInsets.zero,
           contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-          title: _buildUnifiedHeader(
-            Icons.badge_outlined,
-            'Личные данные',
-            proColors.accentAction,
-            colors,
-            textTheme,
+          title: DialogUtils.buildUnifiedHeader(
+            icon: Icons.person_outline,
+            title: 'Изменить имя',
+            accentColor: proColors.accentAction,
+            textTheme: textTheme,
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -450,46 +391,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           actionsAlignment: MainAxisAlignment.center,
           actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-          actions: [
-            _buildDialogAction(
-              'Отмена',
-              () => Navigator.pop(context),
-              colors,
-              isPrimary: false,
-            ),
-            const SizedBox(width: 12),
-            _buildDialogAction(
-              'Сохранить',
-              () async {
-                try {
-                  final user = FirebaseAuth.instance.currentUser;
-                  if (user != null) {
-                    // Update Firestore with the new name
-                    await FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user.uid)
-                        .update({'name': controller.text.trim()});
-
-                    // Refresh the provider to show the new name immediately
-                    ref.invalidate(userRoleProvider);
-
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Данные успешно обновлены')),
-                    );
-                  }
-                } catch (e) {
-                  if (!context.mounted) return;
-                  _showErrorSnackBar(context, 'Ошибка сохранения: $e');
-                }
-              },
-              colors,
-              isPrimary: true,
-              color: proColors.accentAction,
-            ),
-          ],
+          actions: [],
         ),
       ),
     );
@@ -718,7 +620,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: () => _updateProfilePicture(context, user.uid),
+                    onTap: () => DialogUtils.buildUnifiedHeader,
                     borderRadius: BorderRadius.circular(20),
                     child: Container(
                       padding: const EdgeInsets.all(2),
@@ -962,221 +864,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           (showChevron
               ? const Icon(Icons.chevron_right, size: 20, color: Colors.grey)
               : null),
-    );
-  }
-
-  // ───────────────── DIALOG HEADER HELPER ─────────────────
-  Widget _buildUnifiedHeader(
-    IconData icon,
-    String title,
-    Color color,
-    ColorScheme colors,
-    TextTheme textTheme,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      decoration: BoxDecoration(
-        color: colors.onSurface.withValues(alpha: 0.04),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 32),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ───────────────── SNACKBAR HELPER ─────────────────
-  void _showErrorSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  // ───────────────── DIALOG BUTTON HELPER ─────────────────
-  Widget _buildDialogAction(
-    String text,
-    VoidCallback onTap,
-    ColorScheme colors, {
-    required bool isPrimary,
-    Color? color,
-  }) {
-    return SizedBox(
-      height: 48,
-      width: 120,
-      child: isPrimary
-          ? ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color,
-                shape: const StadiumBorder(),
-                elevation: 0,
-              ),
-              onPressed: onTap,
-              child: Text(
-                text,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            )
-          : OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                shape: const StadiumBorder(),
-                side: BorderSide(color: colors.outlineVariant),
-              ),
-              onPressed: onTap,
-              child: Text(
-                text,
-                style: TextStyle(
-                  color: colors.onSurface.withValues(alpha: 0.7),
-                ),
-              ),
-            ),
-    );
-  }
-
-  // ───────────────── PASSWORD RESET LOGIC ─────────────────
-  Future<void> _sendPasswordReset(BuildContext context, String email) async {
-    // 1. Access the professional theme colors
-    final proColors = Theme.of(context).extension<SkladColors>()!;
-
-    try {
-      // 2. Trigger the Firebase reset email
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-
-      // 3. Safety check: Ensure the screen is still active before showing UI
-      if (!context.mounted) return;
-
-      // 4. Show a floating feedback message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Ссылка для сброса отправлена на почту'),
-          backgroundColor: proColors.accentAction,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      // 5. FIXED: Call the success dialog with BOTH required arguments
-      _showResetSuccessDialog(context, email);
-    } catch (e) {
-      if (!context.mounted) return;
-
-      // 6. Handle errors (e.g., no internet or invalid email)
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ошибка при отправке письма'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    }
-  }
-
-  // ───────────────── RESET SUCCESS DIALOG ─────────────────
-  void _showResetSuccessDialog(BuildContext context, String email) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final textTheme = theme.textTheme;
-    final proColors = theme.extension<SkladColors>()!;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        // Use the professional surface color instead of generic background
-        backgroundColor: proColors.surfaceLow,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        titlePadding: EdgeInsets.zero,
-        title: _buildUnifiedHeader(
-          Icons.mark_email_read_outlined,
-          'Письмо отправлено',
-          proColors.success, // Use the success color from your pro theme
-          colors,
-          textTheme,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Text(
-              'Инструкции по сбросу пароля были успешно отправлены на адрес:',
-              textAlign: TextAlign.center,
-              style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              email,
-              style: textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: proColors.warning.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: proColors.warning.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: proColors.warning, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Если вы не видите письма, обязательно проверьте папку "Спам".',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: proColors.warning,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        actions: [
-          // FIXED: Changed from "Отправить" to "Понятно" as the process is finished
-          Center(
-            child: SizedBox(
-              width: double.infinity,
-              child: _buildDialogAction(
-                'Понятно',
-                () => Navigator.pop(context),
-                colors,
-                isPrimary: true,
-                color: proColors.accentAction,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

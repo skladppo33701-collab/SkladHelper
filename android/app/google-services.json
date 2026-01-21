@@ -12,7 +12,20 @@
           "package_name": "kz.arystan.sklad_helper_33701"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "437534842036-f8hoapdide71icpfo7q35q6jvqv4daqv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "kz.arystan.sklad_helper_33701",
+            "certificate_hash": "e9e73d57aa269f851fd1830736096195b80b648e"
+          }
+        },
+        {
+          "client_id": "437534842036-8q15ehnsupigibj9t4lg4ut4kkr60b75.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBafo3zY0dJPp5J6XCKa-Gm4o2d2muWIok"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "437534842036-8q15ehnsupigibj9t4lg4ut4kkr60b75.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "437534842036-k6qqbnaum817qetohm0sotco9g2fu8ub.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "kz.arystan.skladHelper33701"
+              }
+            }
+          ]
         }
       }
     }

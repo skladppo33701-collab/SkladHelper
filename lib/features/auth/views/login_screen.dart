@@ -1,9 +1,10 @@
+import 'package:sklad_helper_33701/shared/widgets/dialog_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
-import 'package:random_password_generator/random_password_generator.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -13,28 +14,14 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with SingleTickerProviderStateMixin {
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _isLoginMode = true;
   bool _obscurePassword = true;
-  bool _isWandActive = false;
-
-  void _generateStrongPassword() {
-    final generator = RandomPasswordGenerator();
-    String newPassword = generator.randomPassword(
-      letters: true,
-      uppercase: true,
-      numbers: true,
-      specialChar: true,
-      passwordLength: 12,
-    );
-    setState(() {
-      _passwordController.text = newPassword;
-      _obscurePassword = false;
-    });
-  }
 
   @override
   void dispose() {
@@ -45,133 +32,225 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AuthStatus>(authProvider, (previous, next) {
-      if (next == AuthStatus.error) {
-        _showError('Ошибка входа. Проверьте данные.');
-      }
-    });
-
     final proColors = Theme.of(context).extension<SkladColors>()!;
+    final size = MediaQuery.of(context).size;
 
     return Container(
-      decoration: BoxDecoration(
-        // Removed const
+      decoration: const BoxDecoration(
         gradient: RadialGradient(
-          center: const Alignment(-0.5, -0.75),
+          center: Alignment(-0.5, -0.75),
           radius: 1.5,
-          colors: [proColors.surfaceLow, const Color(0xFF050206)],
-          stops: const [0.0, 0.8],
+          colors: [
+            Color(0xFF1E1B4B), // Deep Indigo
+            Color(0xFF050206), // Black
+          ],
+          stops: [0.0, 0.8],
         ),
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: IntrinsicHeight(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 30.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 60),
-                          _buildHeader(),
-                          const SizedBox(height: 40),
-                          _buildSocialButton(),
-                          const SizedBox(height: 28),
-                          _buildDivider(),
-                          const SizedBox(height: 18),
-                          _buildGlassInput(
-                            controller: _emailController,
-                            hint: 'Электронная почта',
-                            proColors: proColors,
-                          ),
-                          const SizedBox(height: 15),
-                          _buildGlassInput(
-                            controller: _passwordController,
-                            hint: 'Пароль',
-                            isPassword: true,
-                            proColors: proColors,
-                          ),
-                          if (_isLoginMode)
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: () {
-                                  final email = _emailController.text.trim();
-                                  _showPasswordResetConfirmation(
-                                    context,
-                                    email,
-                                    proColors,
-                                  );
-                                },
-                                style: TextButton.styleFrom(
-                                  splashFactory: NoSplash.splashFactory,
-                                  padding: const EdgeInsets.only(
-                                    top: 12,
-                                    bottom: 20,
-                                  ),
-                                ),
-                                child: Text(
-                                  'Забыли пароль?',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          const SizedBox(height: 30),
-                          _buildMainButton(proColors),
-                          const Spacer(),
-                          _buildToggleLink(),
-                          const SizedBox(height: 10),
-                        ],
+        // 1. FIXED: Replaced LayoutBuilder+IntrinsicHeight with CustomScrollView+SliverFillRemaining
+        // This prevents the "GlobalKey ink renderer" duplication crash.
+        body: CustomScrollView(
+          slivers: [
+            SliverFillRemaining(
+              hasScrollBody:
+                  false, // Ensures content scrolls if it gets too tall
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Top spacing
+                      SizedBox(height: size.height * 0.12),
+
+                      _buildHeader(),
+                      const SizedBox(height: 40),
+
+                      _buildPillGoogleButton(proColors),
+
+                      const SizedBox(height: 32),
+                      _buildDivider(),
+                      const SizedBox(height: 32),
+
+                      // --- Inputs ---
+                      _buildTitleInput(
+                        controller: _emailController,
+                        title: 'Электронная почта',
+                        hint: 'example@mail.com',
+                        icon: Icons.alternate_email,
+                        proColors: proColors,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return null;
+                          final bool emailValid = RegExp(
+                            r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+                          ).hasMatch(value);
+                          return emailValid ? null : 'Некорректный email';
+                        },
                       ),
-                    ),
+                      const SizedBox(height: 20),
+                      _buildTitleInput(
+                        controller: _passwordController,
+                        title: 'Пароль',
+                        hint: '••••••••',
+                        icon: Icons.lock_outline,
+                        proColors: proColors,
+                        isPassword: true,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return null;
+                          return value.length < 6 ? 'Минимум 6 символов' : null;
+                        },
+                      ),
+
+                      // --- Forgot Password ---
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        alignment: Alignment.topCenter,
+                        child: _isLoginMode
+                            ? Align(
+                                alignment: Alignment.centerRight,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: TextButton(
+                                    onPressed: () {
+                                      final email = _emailController.text
+                                          .trim();
+                                      _showPasswordResetConfirmation(
+                                        context,
+                                        email,
+                                      ); // ← 2 аргумента: context + email
+                                    },
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.white70,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: Text(
+                                      'Забыли пароль?',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // --- Primary Button ---
+                      _buildPrimaryButton(proColors),
+
+                      // This Spacer now works perfectly inside SliverFillRemaining
+                      const Spacer(),
+
+                      const SizedBox(height: 24),
+                      _buildToggleLink(proColors),
+                      const SizedBox(height: 60),
+                    ],
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+
+  // --- WIDGET BUILDERS ---
 
   Widget _buildHeader() {
-    return Text(
-      _isLoginMode ? 'Войдите в\nSkladHelper' : 'Создайте\nаккаунт',
-      style: GoogleFonts.inter(
-        fontSize: 34,
-        fontWeight: FontWeight.w700,
-        color: Colors.white,
-        height: 1.1,
-        letterSpacing: -1.0,
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          alignment: Alignment.centerLeft,
+          children: <Widget>[
+            ...previousChildren,
+            if (currentChild != null) currentChild,
+          ],
+        );
+      },
+      child: Column(
+        key: ValueKey<bool>(_isLoginMode),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _isLoginMode ? 'С возвращением!' : 'Создать аккаунт',
+            style: GoogleFonts.inter(
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _isLoginMode
+                ? 'Войдите, чтобы управлять складом'
+                : 'Зарегистрируйтесь для начала работы',
+            style: GoogleFonts.inter(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 15,
+              height: 1.5,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildSocialButton() {
+  Widget _buildPillGoogleButton(SkladColors proColors) {
     return SizedBox(
-      width: double.infinity,
       height: 56,
-      child: ElevatedButton.icon(
-        onPressed: () => _showError('Вход через Google будет доступен скоро'),
-        icon: const Icon(Icons.g_mobiledata, color: Colors.black, size: 30),
-        label: Text(
-          _isLoginMode ? 'Войти через Google' : 'Регистрация через Google',
-        ),
-        style: ElevatedButton.styleFrom(
+      child: OutlinedButton(
+        onPressed: () => ref.read(authProvider.notifier).signInWithGoogle(),
+        style: OutlinedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
-          shape: const StadiumBorder(),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(50),
+          ),
+          side: BorderSide.none,
           elevation: 0,
-          splashFactory: NoSplash.splashFactory,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: SvgPicture.network(
+                'https://www.svgrepo.com/show/475656/google-color.svg',
+                placeholderBuilder: (_) => const Icon(
+                  Icons.g_mobiledata,
+                  color: Colors.black,
+                  size: 28,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Google',
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -182,12 +261,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       children: [
         Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.1))),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
-            'или через почту',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.3),
-              fontSize: 12,
+            'или',
+            style: GoogleFonts.inter(
+              color: Colors.white.withValues(alpha: 0.4),
+              fontSize: 13,
             ),
           ),
         ),
@@ -196,145 +275,137 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildGlassInput({
+  Widget _buildTitleInput({
     required TextEditingController controller,
+    required String title,
     required String hint,
+    required IconData icon,
     required SkladColors proColors,
     bool isPassword = false,
+    String? Function(String?)? validator,
   }) {
-    return Theme(
-      data: Theme.of(context).copyWith(
-        textSelectionTheme: TextSelectionThemeData(
-          selectionHandleColor: proColors.accentAction,
-          selectionColor: proColors.accentAction.withValues(alpha: 0.3),
-          cursorColor: proColors.accentAction,
-        ),
-      ),
-      child: TextField(
-        controller: controller,
-        obscureText: isPassword ? _obscurePassword : false,
-        style: const TextStyle(color: Colors.white, fontSize: 16),
-        cursorColor: proColors.accentAction,
-        cursorWidth: 2,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 10,
-            horizontal: 0,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.inter(
+            color: Colors.white70,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
           ),
-          enabledBorder: UnderlineInputBorder(
-            borderSide: BorderSide(
-              color: Colors.white.withValues(alpha: 0.15),
-              width: 1.2,
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          validator: validator,
+          obscureText: isPassword && _obscurePassword,
+          cursorColor: proColors.accentAction,
+          style: GoogleFonts.inter(color: Colors.white, fontSize: 16),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: GoogleFonts.inter(color: Colors.white24),
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.05),
+            prefixIcon: Icon(icon, color: Colors.white54, size: 20),
+            suffixIcon: isPassword
+                ? IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: Colors.white38,
+                      size: 20,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                  )
+                : null,
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 18,
+              horizontal: 16,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: proColors.accentAction, width: 1.5),
+            ),
+            errorStyle: GoogleFonts.inter(
+              color: Colors.redAccent,
+              fontSize: 12,
             ),
           ),
-          focusedBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: proColors.accentAction, width: 1.2),
-          ),
-          suffixIconConstraints: const BoxConstraints(
-            minHeight: 24,
-            minWidth: 24,
-          ),
-          suffixIcon: isPassword
-              ? Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!_isLoginMode)
-                        GestureDetector(
-                          onTap: () async {
-                            if (_isWandActive) return;
-                            setState(() => _isWandActive = true);
-                            _generateStrongPassword();
-                            await Future.delayed(
-                              const Duration(milliseconds: 150),
-                            );
-                            if (mounted) setState(() => _isWandActive = false);
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.all(8),
-                            child: Icon(
-                              Icons.auto_fix_high,
-                              size: 24,
-                              color: _isWandActive
-                                  ? proColors.accentAction
-                                  : Colors.white.withValues(alpha: 0.5),
-                            ),
-                          ),
-                        ),
-                      IconButton(
-                        padding: const EdgeInsets.all(8),
-                        constraints: const BoxConstraints(),
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                          color: Colors.white.withValues(alpha: 0.5),
-                          size: 24,
-                        ),
-                        onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : null,
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildMainButton(SkladColors proColors) {
-    final authStatus = ref.watch(authProvider);
-    final isLoading = authStatus == AuthStatus.loading;
-
+  Widget _buildPrimaryButton(SkladColors proColors) {
     return SizedBox(
-      width: double.infinity,
       height: 56,
+      width: double.infinity,
       child: ElevatedButton(
-        onPressed: isLoading
-            ? null
-            : () {
-                final email = _emailController.text.trim();
-                final password = _passwordController.text.trim();
-                if (email.isEmpty || password.isEmpty) {
-                  _showError('Заполните все поля');
-                  return;
-                }
-                if (_isLoginMode) {
-                  ref.read(authProvider.notifier).login(email, password);
-                } else {
-                  ref.read(authProvider.notifier).signUp(email, password);
-                }
-              },
+        onPressed: () async {
+          if (_formKey.currentState!.validate()) {
+            final email = _emailController.text.trim();
+            final password = _passwordController.text.trim();
+            String? error;
+            if (_isLoginMode) {
+              error = await ref
+                  .read(authProvider.notifier)
+                  .signIn(email, password);
+            } else {
+              error = await ref
+                  .read(authProvider.notifier)
+                  .signUp(email, password);
+            }
+            if (error != null && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    error,
+                    style: GoogleFonts.inter(color: Colors.white),
+                  ),
+                  backgroundColor: Colors.redAccent,
+                  behavior: SnackBarBehavior.floating,
+                  margin: const EdgeInsets.all(16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            }
+          }
+        },
         style: ElevatedButton.styleFrom(
-          backgroundColor: proColors.surfaceHigh,
+          backgroundColor: proColors.accentAction,
           foregroundColor: Colors.white,
-          elevation: 0,
-          shape: StadiumBorder(
-            side: BorderSide(
-              color: Colors.white.withValues(alpha: 0.1),
-              width: 1,
-            ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
+          elevation: 0,
         ),
-        child: isLoading
+        child: ref.watch(authProvider) == AuthStatus.loading
             ? const SizedBox(
                 height: 24,
                 width: 24,
                 child: CircularProgressIndicator(
                   color: Colors.white,
-                  strokeWidth: 2.5,
+                  strokeWidth: 2,
                 ),
               )
             : Text(
                 _isLoginMode ? 'Войти' : 'Создать аккаунт',
-                style: const TextStyle(
+                style: GoogleFonts.inter(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -343,25 +414,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildToggleLink() {
+  Widget _buildToggleLink(SkladColors proColors) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
           _isLoginMode ? 'Нет аккаунта?' : 'Уже есть аккаунт?',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.6),
-            fontSize: 15,
-          ),
+          style: GoogleFonts.inter(color: Colors.white60, fontSize: 14),
         ),
         TextButton(
           onPressed: () => setState(() => _isLoginMode = !_isLoginMode),
           child: Text(
-            _isLoginMode ? 'Создать' : 'Войти',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              color: Colors.white,
+            _isLoginMode ? 'Зарегистрироваться' : 'Войти',
+            style: GoogleFonts.inter(
+              color: proColors.accentAction,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
             ),
           ),
         ),
@@ -369,196 +437,99 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(color: Colors.white)),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
+  void _showPasswordResetConfirmation(BuildContext context, String email) {
+    if (email.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Введите email')));
+      return;
+    }
 
-  Future<void> _showPasswordResetConfirmation(
-    BuildContext context,
-    String email,
-    SkladColors proColors,
-  ) async {
-    final theme = Theme.of(context);
-
-    return showDialog(
+    DialogUtils.showSkladDialog(
       context: context,
-      builder: (context) => Theme(
-        data: theme.copyWith(
-          textSelectionTheme: TextSelectionThemeData(
-            selectionHandleColor: proColors.accentAction,
-            cursorColor: proColors.accentAction,
-          ),
-        ),
-        child: AlertDialog(
-          backgroundColor: proColors.surfaceLow,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-          ),
-          titlePadding: EdgeInsets.zero,
-          title: _buildUnifiedHeader(
-            Icons.lock_reset_outlined,
-            'Сброс пароля',
-            proColors.accentAction,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Мы отправим ссылку для сброса пароля на вашу почту:',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                  horizontal: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: Text(
-                  email.isEmpty ? "email@example.com" : email,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-          actions: [
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDialogAction(
-                    'Отмена',
-                    () => Navigator.pop(context),
-                    isPrimary: false,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildDialogAction(
-                    'Отправить',
-                    () async {
-                      Navigator.pop(context);
-                      await _sendPasswordReset(context, email, proColors);
-                    },
-                    isPrimary: true,
-                    color: proColors.accentAction,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUnifiedHeader(IconData icon, String title, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
+      title: 'Сброс пароля',
+      icon: Icons.lock_reset_outlined,
+      primaryButtonText: 'Отправить',
+      secondaryButtonText: 'Отмена',
+      showWarning: true,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 32),
-          const SizedBox(height: 12),
           Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
+            'Мы отправим ссылку для сброса пароля на вашу почту:',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Text(
+              email,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontSize: 16,
+              ),
             ),
           ),
         ],
       ),
+      onPrimaryTap: () async {
+        Navigator.pop(context);
+        await _sendPasswordReset(context, email);
+      },
+      onSecondaryTap: () => Navigator.pop(context),
     );
   }
 
-  Widget _buildDialogAction(
-    String text,
-    VoidCallback onTap, {
-    required bool isPrimary,
-    Color? color,
-  }) {
-    return SizedBox(
-      height: 44,
-      child: isPrimary
-          ? ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color,
-                foregroundColor: Colors.white,
-                shape: const StadiumBorder(),
-                elevation: 0,
-              ),
-              onPressed: onTap,
-              child: Text(
-                text,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            )
-          : OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                shape: const StadiumBorder(),
-                side: const BorderSide(color: Colors.white24),
-              ),
-              onPressed: onTap,
-              child: Text(text, style: const TextStyle(color: Colors.white70)),
-            ),
-    );
-  }
-
-  Future<void> _sendPasswordReset(
-    BuildContext context,
-    String email,
-    SkladColors proColors,
-  ) async {
+  Future<void> _sendPasswordReset(BuildContext context, String email) async {
     try {
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Ссылка для сброса отправлена на вашу почту'),
-          backgroundColor: proColors.accentAction,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+
+      DialogUtils.showSkladDialog(
+        context: context,
+        title: 'Письмо отправлено',
+        icon: Icons.mark_email_read_outlined,
+        primaryButtonText: 'Понятно',
+        accentColorOverride: Theme.of(
+          context,
+        ).extension<SkladColors>()!.success,
+        showWarning: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Инструкции по сбросу пароля были отправлены на:',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              email,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontSize: 16,
+              ),
+            ),
+          ],
         ),
+        onPrimaryTap: () => Navigator.pop(context),
       );
-    } on FirebaseAuthException catch (e) {
-      if (!context.mounted) return;
-      String message = 'Ошибка при отправке';
-      if (e.code == 'user-not-found') {
-        message = 'Пользователь с такой почтой не найден';
-      } else if (e.code == 'invalid-email') {
-        message = 'Некорректный адрес почты';
-      }
-      _showError(message);
     } catch (e) {
       if (!context.mounted) return;
-      _showError('Произошла ошибка: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Ошибка: ${e.toString()}')));
     }
   }
 }
