@@ -7,9 +7,9 @@ import '../../auth/models/user_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
-import 'package:pocketbase/pocketbase.dart';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:sklad_helper_33701/shared/widgets/dialog_utils.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -20,7 +20,7 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _isUploading = false;
-  final pb = PocketBase('http://100.123.47.14:8090');
+
   // ───────────────── PASSWORD RESET DIALOG ─────────────────
   Future<void> _showPasswordResetConfirmation(
     BuildContext context,
@@ -276,39 +276,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final isDark = theme.brightness == Brightness.dark;
     final proColors = theme.extension<SkladColors>()!;
 
-    // 1. SAFETY CHECK FOR 2GB LIMIT (With Timeout)
-    try {
-      final totalRecords = await pb
-          .collection('users')
-          .getList(page: 1, perPage: 1)
-          .timeout(
-            const Duration(seconds: 2),
-          ); // Don't hang if laptop is offline
-
-      if (totalRecords.totalItems > 20000) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Лимит хранилища (2ГБ) исчерпан.')),
-        );
-        return;
-      }
-    } catch (e) {
-      debugPrint("Server check skipped: $e");
-    }
-
     final picker = ImagePicker();
 
-    // 2. EXTREME COMPRESSION TO SAVE DISK SPACE
+    // 1. PICK & EXTREME COMPRESSION (Saves Cloudinary Credits)
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 400,
       maxHeight: 400,
-      imageQuality: 30,
+      imageQuality: 30, // Tiny file size (~50KB)
     );
 
     if (image == null) return;
 
-    // 3. IMAGE CROPPER
+    // 2. CROP LOGIC (Defines croppedFile)
     final CroppedFile? croppedFile = await ImageCropper().cropImage(
       sourcePath: image.path,
       aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
@@ -330,44 +310,51 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ],
     );
 
+    // If user cancels crop, stop here
     if (croppedFile == null) return;
 
     setState(() => _isUploading = true);
 
     try {
-      // 4. UPLOAD DIRECTLY TO WORK LAPTOP
-      final record = await pb
-          .collection('users')
-          .create(
-            body: {'username': uid},
-            files: [
-              await http.MultipartFile.fromPath('photo', croppedFile.path),
-            ],
-          );
+      // 3. CLOUDINARY CONFIG
+      const String cloudName = "dukgkpmqw";
+      const String uploadPreset = "sklad_helper_preset";
 
-      // 5. GENERATE URL FROM POCKETBASE
-      final String imageUrl = pb.files
-          .getUrl(record, record.getStringValue('photo'))
-          .toString();
-
-      // 6. UPDATE FIRESTORE (Matches your AppUser model)
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'photoUrl': imageUrl,
+      FormData formData = FormData.fromMap({
+        "file": await MultipartFile.fromFile(croppedFile.path),
+        "upload_preset": uploadPreset,
       });
 
-      if (!context.mounted) return;
-      ref.invalidate(userRoleProvider); // Refresh the UI immediately
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Фото успешно сохранено на рабочем сервере'),
-        ),
+      // 4. UPLOAD TO CLOUDINARY
+      var response = await Dio().post(
+        "https://api.cloudinary.com/v1_1/$cloudName/image/upload",
+        data: formData,
       );
+
+      if (response.statusCode == 200) {
+        final String secureUrl = response.data['secure_url'];
+
+        // 5. UPDATE FIRESTORE
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          'photoUrl': secureUrl,
+        });
+
+        // Clear cache here to show the new photo immediately
+        PaintingBinding.instance.imageCache.clear();
+        PaintingBinding.instance.imageCache.clearLiveImages();
+
+        if (!context.mounted) return;
+        ref.invalidate(userRoleProvider);
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Фото успешно сохранено')));
+      }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text("Ошибка сервера: $e")));
+        ).showSnackBar(SnackBar(content: Text("Ошибка загрузки: $e")));
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);
@@ -700,13 +687,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                 ),
                 child: CircleAvatar(
-                  key: ValueKey(
-                    user.photoUrl,
-                  ), // Forces Flutter to rebuild when URL changes
+                  key: ValueKey(user.photoUrl), //
                   radius: 40,
                   backgroundImage:
                       user.photoUrl != null && user.photoUrl!.isNotEmpty
-                      ? NetworkImage(user.photoUrl!)
+                      ? NetworkImage(
+                          // Add this timestamp to bypass Flutter and CDN caching
+                          "${user.photoUrl!}?v=${DateTime.now().millisecondsSinceEpoch}",
+                        )
                       : null,
                   child: _isUploading
                       ? const CircularProgressIndicator(

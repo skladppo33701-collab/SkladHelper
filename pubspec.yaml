@@ -67,8 +67,6 @@ dependencies:
   firebase_storage: ^13.0.5
   image_cropper: ^11.0.0
   flutter_slidable: ^4.0.3
-  pocketbase: ^0.23.2
-  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
