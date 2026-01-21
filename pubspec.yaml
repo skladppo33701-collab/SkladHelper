@@ -93,6 +93,7 @@ dependencies:
   vibration: ^3.1.5
   random_password_generator: ^0.2.1
   flutter_svg: ^2.2.3
+  csv: ^6.0.0
 
 dev_dependencies:
   flutter_test:

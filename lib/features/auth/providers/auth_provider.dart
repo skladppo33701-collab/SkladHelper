@@ -88,14 +88,19 @@ class AuthNotifier extends Notifier<AuthStatus> {
   }
 
   // --- GOOGLE SIGN IN (Corrected for v7+) ---
+  // --- GOOGLE SIGN IN (Corrected for v7+) ---
   Future<void> signInWithGoogle() async {
     state = AuthStatus.loading;
     try {
       // 1. Initialize (Required in v7)
-      await _googleSignIn.initialize();
+      // CHANGE THIS SECTION:
+      await _googleSignIn.initialize(
+        clientId: kIsWeb
+            ? 'YOUR_NEW_CLIENT_ID.apps.googleusercontent.com' // <--- Paste here
+            : null,
+      );
 
       // 2. Authenticate
-      // Note: 'authenticate' usually throws if cancelled in v7, making the result non-nullable.
       final googleUser = await _googleSignIn.authenticate(
         scopeHint: ['email', 'profile'],
       );
