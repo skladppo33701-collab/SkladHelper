@@ -41,41 +41,46 @@ class DialogUtils {
           accentColor: accent,
           textTheme: textTheme,
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            content,
-            if (showWarning) ...[
-              const SizedBox(height: 20),
-              _buildWarningBox(
-                text:
-                    warningText ??
-                    'Если вы не видите письма, обязательно проверьте папку "Спам".',
-                proColors: proColors,
-                textTheme: textTheme,
-              ),
-            ],
-          ],
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        actions: [
-          Column(
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildAction(
-                text: primaryButtonText,
-                onTap: onPrimaryTap,
-                isPrimary: true,
-                color: accent,
-              ),
-              if (secondaryButtonText != null) ...[
-                const SizedBox(height: 12),
-                _buildAction(
-                  text: secondaryButtonText,
+              content,
+              if (showWarning) ...[
+                const SizedBox(height: 20),
+                _buildWarningBox(
+                  text:
+                      warningText ??
+                      'Если вы не видите письма, обязательно проверьте папку "Спам".',
+                  proColors: proColors,
+                  textTheme: textTheme,
+                ),
+              ],
+            ],
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        actions: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              Expanded(
+                child: buildDialogAction(
+                  text: secondaryButtonText ?? 'Отмена',
                   onTap: onSecondaryTap ?? () => Navigator.pop(context),
                   isPrimary: false,
                 ),
-              ],
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: buildDialogAction(
+                  text: primaryButtonText,
+                  onTap: onPrimaryTap,
+                  isPrimary: true,
+                  color: accent,
+                ),
+              ),
             ],
           ),
         ],
@@ -90,30 +95,35 @@ class DialogUtils {
     required TextTheme textTheme,
   }) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+      padding: const EdgeInsets.fromLTRB(
+        24,
+        20,
+        24,
+        16,
+      ), // ↓ reduced top padding from 32→20
       decoration: BoxDecoration(
-        color: accentColor.withValues(alpha: 0.08), // ← matches original
+        color: accentColor.withValues(alpha: 0.08),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      child: Row(
-        // ← back to Row layout
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center, // center vertically
         children: [
-          Icon(icon, color: accentColor, size: 32),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              title,
-              style:
-                  textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: accentColor,
-                  ) ??
-                  TextStyle(
-                    color: accentColor,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
+          Icon(icon, color: accentColor, size: 36), // slightly smaller icon
+          const SizedBox(height: 8), // tight spacing
+          Text(
+            title,
+            style:
+                textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: accentColor,
+                ) ??
+                TextStyle(
+                  color: accentColor,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -147,18 +157,17 @@ class DialogUtils {
     );
   }
 
-  static Widget _buildAction({
+  static Widget buildDialogAction({
+    // ← rename to match what you use
     required String text,
     required VoidCallback onTap,
     required bool isPrimary,
-    Color? color, // ← can be null now
+    Color? color,
     bool isDestructive = false,
   }) {
     final effectiveColor = isDestructive
         ? Colors.redAccent
-        : (color ??
-              Colors
-                  .blueAccent); // safe fallback, but we always pass real color
+        : (color ?? Colors.blueAccent);
 
     return SizedBox(
       width: double.infinity,
