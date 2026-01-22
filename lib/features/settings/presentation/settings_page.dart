@@ -8,9 +8,10 @@ import '../../auth/models/user_model.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
 import 'package:sklad_helper_33701/shared/widgets/dialog_utils.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
-import 'package:dio/dio.dart';
+import 'package:sklad_helper_33701/core/utils/cropper/cropper_helper.dart';
 import 'package:sklad_helper_33701/features/inventory/providers/task_stats_provider.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart'; // for kIsWeb
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -839,57 +840,51 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _updateProfilePicture(BuildContext context, String uid) async {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    // final isDark = theme.brightness == Brightness.dark; // Unused if using helper
     final proColors = theme.extension<SkladColors>()!;
 
     final picker = ImagePicker();
-
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
-      maxWidth: 800, // ↑ allow higher resolution (still reasonable for pfp)
+      maxWidth: 800,
       maxHeight: 800,
-      imageQuality:
-          85, // ↑ 85–90 is sweet spot: good quality + small file (~300–800 KB)
+      imageQuality: 85,
     );
 
     if (image == null) return;
 
-    final CroppedFile? croppedFile = await ImageCropper().cropImage(
-      sourcePath: image.path,
-      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: 'Редактировать',
-          toolbarColor: proColors.surfaceLow,
-          toolbarWidgetColor: Colors.white,
-          activeControlsWidgetColor: proColors.accentAction,
-          initAspectRatio: CropAspectRatioPreset.square,
-          lockAspectRatio: true,
-          backgroundColor: isDark ? const Color(0xFF020617) : Colors.white,
-        ),
-        IOSUiSettings(
-          title: 'Редактировать',
-          cancelButtonTitle: 'Отмена',
-          doneButtonTitle: 'Готово',
-        ),
-      ],
-    );
+    // FIX 1: Use the conditional import helper we created.
+    // This safely crops on Mobile and skips cropping on Web.
+    final String? processedPath = await cropImageIfPossible(image);
 
-    if (croppedFile == null) return;
+    if (processedPath == null) return;
 
     setState(() => _isUploading = true);
 
     try {
       const String cloudName = "dukgkpmqw";
-      const String uploadPreset =
-          "sklad_helper_preset"; // confirm this is correct in Cloudinary dashboard
+      const String uploadPreset = "sklad_helper_preset";
+
+      // FIX 2: Prepare the file for upload differently for Web vs Mobile
+      MultipartFile fileToUpload;
+
+      if (kIsWeb) {
+        // Web: Read as bytes (Path is a Blob URL, cannot be opened as File)
+        final bytes = await XFile(processedPath).readAsBytes();
+        fileToUpload = MultipartFile.fromBytes(
+          bytes,
+          filename: 'pfp_upload.jpg',
+        );
+      } else {
+        // Mobile: Open file from path
+        fileToUpload = await MultipartFile.fromFile(processedPath);
+      }
 
       FormData formData = FormData.fromMap({
-        "file": await MultipartFile.fromFile(croppedFile.path),
+        "file": fileToUpload,
         "upload_preset": uploadPreset,
-        "quality": "auto:good", // ← Cloudinary auto, but good quality
-        "fetch_format":
-            "auto", // auto webp/avif for better compression without loss
+        "quality": "auto:good",
+        "fetch_format": "auto",
         "resource_type": "image",
       });
 
@@ -897,9 +892,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         "https://api.cloudinary.com/v1_1/$cloudName/image/upload",
         data: formData,
         onSendProgress: (sent, total) {
-          debugPrint(
-            'Upload progress: ${(sent / total * 100).toStringAsFixed(1)}% ($sent/$total bytes)',
-          );
+          if (total > 0) {
+            debugPrint(
+              'Upload progress: ${(sent / total * 100).toStringAsFixed(1)}%',
+            );
+          }
         },
       );
 
@@ -921,18 +918,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ).showSnackBar(const SnackBar(content: Text('Фото сохранено')));
       } else {
         throw Exception(
-          'Cloudinary response error: ${response.statusCode} - ${response.data}',
+          'Cloudinary error: ${response.statusCode} - ${response.data}',
         );
       }
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Ошибка загрузки фото: $e'),
+          content: Text('Ошибка загрузки: $e'),
           backgroundColor: proColors.error,
         ),
       );
-      debugPrint('PFP error: $e'); // check console for details
+      debugPrint('PFP Error: $e');
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }

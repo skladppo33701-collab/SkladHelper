@@ -1,5 +1,3 @@
-import 'package:uuid/uuid.dart';
-
 enum AssignmentStatus { pending, inProgress, completed, archived }
 
 class AssignmentItem {
