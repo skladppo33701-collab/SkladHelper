@@ -98,6 +98,7 @@ dependencies:
   csv: ^6.0.0
   syncfusion_flutter_pdf: ^32.1.24
   google_identity_services_web: ^0.3.3+1
+  uuid: ^4.5.2
   
 dev_dependencies:
   flutter_test:

@@ -53,8 +53,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        // 1. FIXED: Replaced LayoutBuilder+IntrinsicHeight with CustomScrollView+SliverFillRemaining
-        // This prevents the "GlobalKey ink renderer" duplication crash.
         body: CustomScrollView(
           slivers: [
             SliverFillRemaining(
@@ -126,7 +124,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       _showPasswordResetConfirmation(
                                         context,
                                         email,
-                                      ); // ← 2 аргумента: context + email
+                                      );
                                     },
                                     style: TextButton.styleFrom(
                                       foregroundColor: Colors.white70,
@@ -156,7 +154,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       // --- Primary Button ---
                       _buildPrimaryButton(proColors),
 
-                      // This Spacer now works perfectly inside SliverFillRemaining
                       const Spacer(),
 
                       const SizedBox(height: 24),
@@ -218,6 +215,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Widget _buildPillGoogleButton(SkladColors proColors) {
     if (kIsWeb) {
+      // FIX: This now correctly watches the global provider from auth_provider.dart
       final initStatus = ref.watch(googleSignInInitProvider);
 
       return initStatus.when(
@@ -241,7 +239,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       );
     }
 
-    // FIX: Match the actual method name below
     return _buildMobileButton(proColors);
   }
 
@@ -509,19 +506,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  final googleSignInInitProvider = FutureProvider<void>((ref) async {
-    if (kIsWeb) {
-      // We access the platform interface directly to call initWithParams
-      await (GoogleSignInPlatform.instance as web.GoogleSignInPlugin)
-          .initWithParams(
-            const SignInInitParameters(
-              clientId:
-                  '437534842036-9agg2s1gh3q02hijoagnhpulvgmtc3n0.apps.googleusercontent.com',
-              scopes: ['email', 'profile'],
-            ),
-          );
-    }
-  });
   Future<void> _sendPasswordReset(BuildContext context, String email) async {
     try {
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);

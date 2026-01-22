@@ -1,26 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
-import 'package:sklad_helper_33701/features/auth/views/login_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'firebase_options.dart';
-import 'package:sklad_helper_33701/features/dashboard/views/manager_dashboard.dart';
-import 'package:sklad_helper_33701/features/dashboard/views/loader_dashboard.dart';
-import 'package:sklad_helper_33701/core/providers/theme_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:sklad_helper_33701/core/theme.dart';
+
+// Project Imports
+import 'firebase_options.dart';
+import 'core/theme.dart';
+import 'core/providers/theme_provider.dart';
+import 'features/auth/providers/auth_provider.dart';
+import 'features/auth/models/user_model.dart';
+
+// Views
+import 'features/auth/views/login_screen.dart';
+import 'features/dashboard/views/manager_dashboard.dart';
+import 'features/dashboard/views/loader_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(const ProviderScope(child: SkladApp()));
 }
 
-class MyApp extends ConsumerWidget {
-  // Fixed: Added named key parameter
-  const MyApp({super.key});
+class SkladApp extends ConsumerWidget {
+  const SkladApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -34,128 +37,138 @@ class MyApp extends ConsumerWidget {
       darkTheme: SkladTheme.darkTheme,
       localizationsDelegates: const [GlobalMaterialLocalizations.delegate],
       supportedLocales: const [Locale('ru')],
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const CircularProgressIndicator();
-          }
+      home: const AuthGate(),
+    );
+  }
+}
 
-          if (snapshot.hasData) {
-            return const RoleBasedScreen();
-          } else {
-            return const LoginScreen();
-          }
-        },
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 1. Listen to raw Firebase Auth State
+    final authState = ref.watch(authStateProvider);
+    // 2. Listen to Database Profile State
+    final userRoleAsync = ref.watch(userRoleProvider);
+
+    return authState.when(
+      data: (firebaseUser) {
+        // CASE A: User is NOT logged in to Firebase
+        if (firebaseUser == null) {
+          return const LoginScreen();
+        }
+
+        // CASE B: User IS logged in. Now check their Database Profile.
+        return userRoleAsync.when(
+          data: (appUser) {
+            // FIX: If Firebase User exists but AppUser (DB) is null,
+            // it means the profile is being created. Do NOT show LoginScreen.
+            if (appUser == null) {
+              // Trigger a retry or just wait for the stream to update
+              return const _LoadingScaffold(message: "Создание профиля...");
+            }
+
+            // Route based on Role
+            switch (appUser.role) {
+              case UserRole.manager:
+                return const ManagerDashboard();
+              case UserRole.loader:
+                return const LoaderDashboard();
+              default:
+                return _ErrorScaffold(
+                  message: "Ваша роль (${appUser.role}) не поддерживается.",
+                  onLogout: () => FirebaseAuth.instance.signOut(),
+                );
+            }
+          },
+          // While fetching the database profile...
+          loading: () => const _LoadingScaffold(message: "Загрузка данных..."),
+          error: (err, stack) => _ErrorScaffold(
+            message: "Ошибка профиля: $err",
+            onLogout: () => FirebaseAuth.instance.signOut(),
+          ),
+        );
+      },
+      // While checking if user is logged in...
+      loading: () => const _LoadingScaffold(message: "Проверка входа..."),
+      error: (err, stack) => _ErrorScaffold(
+        message: "Ошибка авторизации: $err",
+        onLogout: null, // Can't logout if we aren't sure we are logged in
       ),
     );
   }
 }
 
-class RoleBasedScreen extends ConsumerWidget {
-  const RoleBasedScreen({super.key});
+// --- HELPER WIDGETS ---
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final userRole = ref.watch(userRoleProvider);
-
-    return userRole.when(
-      data: (user) {
-        // Fixed: Ensure string comparison works or use proper Enum values
-        final role = user?.role.toString().split('.').last;
-
-        if (role == 'manager') {
-          return const ManagerDashboard();
-        } else if (role == 'loader') {
-          return const LoaderDashboard();
-        } else {
-          FirebaseAuth.instance.signOut();
-          return const LoginScreen();
-        }
-      },
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, _) {
-        // Fixed: Changed __ to _
-        FirebaseAuth.instance.signOut();
-        return const LoginScreen();
-      },
-    );
-  }
-}
-
-class EmailVerificationScreen extends StatelessWidget {
-  const EmailVerificationScreen({super.key});
+class _LoadingScaffold extends StatelessWidget {
+  final String message;
+  const _LoadingScaffold({required this.message});
 
   @override
   Widget build(BuildContext context) {
-    final proColors = Theme.of(context).extension<SkladColors>()!;
-    final colors = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: proColors.surfaceLow,
+      backgroundColor: isDark
+          ? const Color(0xFF0B0F1A)
+          : const Color(0xFFF8FAFC),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.email_outlined,
-              size: 80,
-              color: colors.onSurface.withValues(alpha: 0.7),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              "Подтвердите почту",
-              style: textTheme.titleLarge?.copyWith(color: colors.onSurface),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "Мы отправили ссылку на вашу почту. Перейдите по ней для активации аккаунта.",
-              textAlign: TextAlign.center,
-              style: textTheme.bodyMedium?.copyWith(
-                color: colors.onSurface.withValues(alpha: 0.7),
-              ),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () async {
-                await FirebaseAuth.instance.currentUser?.reload();
-
-                // Fixed: Added mounted check for async gap
-                if (!context.mounted) return;
-
-                if (FirebaseAuth.instance.currentUser?.emailVerified ?? false) {
-                  Navigator.pushReplacementNamed(context, '/dashboard');
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Почта ещё не подтверждена")),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: proColors.accentAction,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
-              ),
-              child: const Text(
-                "Я уже подтвердил",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
+            CircularProgressIndicator(color: Theme.of(context).primaryColor),
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => FirebaseAuth.instance.signOut(),
-              child: Text(
-                "Вернуться к входу",
-                style: TextStyle(
-                  color: colors.onSurface.withValues(alpha: 0.6),
-                ),
+            Text(
+              message,
+              style: TextStyle(
+                color: isDark ? Colors.white54 : Colors.black54,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorScaffold extends StatelessWidget {
+  final String message;
+  final VoidCallback? onLogout;
+
+  const _ErrorScaffold({required this.message, this.onLogout});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Colors.redAccent,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 24),
+              if (onLogout != null)
+                ElevatedButton.icon(
+                  onPressed: onLogout,
+                  icon: const Icon(Icons.logout),
+                  label: const Text("Выйти"),
+                ),
+            ],
+          ),
         ),
       ),
     );
