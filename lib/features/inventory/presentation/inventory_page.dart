@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
+
 import '../providers/inventory_provider.dart';
 import '../models/inventory_item.dart';
-import 'scanner_page.dart'; // FIX: Import the scanner page
+import 'scanner_page.dart';
 
 class InventoryPage extends ConsumerStatefulWidget {
   const InventoryPage({super.key});
@@ -22,23 +25,60 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['csv', 'txt', 'xls'],
+        allowedExtensions: ['csv', 'txt', 'xls', 'xlsx'],
+        withData: true,
       );
 
       if (result != null) {
-        File file = File(result.files.single.path!);
-        String csvContent = await file.readAsString();
-        ref.read(inventoryProvider.notifier).parseCsvData(csvContent);
+        final PlatformFile file = result.files.single;
+        final Uint8List? bytes = file.bytes;
+        final String name = file.name.toLowerCase();
+
+        if (bytes == null) {
+          throw Exception("Не удалось прочитать файл (пустые данные)");
+        }
+
+        String contentToParse = "";
+
+        if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+          var decoder = SpreadsheetDecoder.decodeBytes(bytes, update: true);
+          StringBuffer buffer = StringBuffer();
+
+          for (var table in decoder.tables.keys) {
+            var sheet = decoder.tables[table];
+            if (sheet != null) {
+              for (var row in sheet.rows) {
+                String line = row.map((e) => e?.toString() ?? "").join(";");
+                buffer.writeln(line);
+              }
+            }
+          }
+          contentToParse = buffer.toString();
+        } else {
+          contentToParse = utf8.decode(bytes, allowMalformed: true);
+        }
+
+        ref.read(inventoryProvider.notifier).parseCsvData(contentToParse);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Файл успешно загружен')),
+          );
+        }
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error loading file: $e')));
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка загрузки: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
-  // Helper to open Scanner
   void _openScanner() {
     Navigator.of(
       context,
@@ -56,7 +96,6 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // 1. HEADER & SEARCH
             Container(
               padding: const EdgeInsets.all(16.0),
               decoration: BoxDecoration(
@@ -103,7 +142,6 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                     ],
                   ),
                   const SizedBox(height: 16),
-
                   TextField(
                     controller: _searchController,
                     onChanged: (val) =>
@@ -123,7 +161,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                           Icons.qr_code_scanner,
                           color: proColors.accentAction,
                         ),
-                        onPressed: _openScanner, // FIX: Connect Logic
+                        onPressed: _openScanner,
                       ),
                       filled: true,
                       fillColor: isDark
@@ -142,7 +180,6 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                 ],
               ),
             ),
-
             if (invState.allItems.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -165,7 +202,6 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                   ],
                 ),
               ),
-
             Expanded(
               child: invState.isLoading
                   ? Center(

@@ -1,123 +1,140 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:csv/csv.dart';
 import '../models/inventory_item.dart';
 
 class InventoryState {
   final bool isLoading;
   final List<InventoryItem> allItems;
   final List<InventoryItem> filteredItems;
-  final String selectedWarehouse;
-  final String searchQuery;
 
   InventoryState({
     this.isLoading = false,
     this.allItems = const [],
     this.filteredItems = const [],
-    this.selectedWarehouse = 'All',
-    this.searchQuery = '',
   });
 
   InventoryState copyWith({
     bool? isLoading,
     List<InventoryItem>? allItems,
     List<InventoryItem>? filteredItems,
-    String? selectedWarehouse,
-    String? searchQuery,
   }) {
     return InventoryState(
       isLoading: isLoading ?? this.isLoading,
       allItems: allItems ?? this.allItems,
       filteredItems: filteredItems ?? this.filteredItems,
-      selectedWarehouse: selectedWarehouse ?? this.selectedWarehouse,
-      searchQuery: searchQuery ?? this.searchQuery,
     );
   }
 }
 
-// FIX: Changed from StateNotifier to Notifier
 class InventoryNotifier extends Notifier<InventoryState> {
   @override
-  InventoryState build() {
-    return InventoryState(); // Initial state
+  InventoryState build() => InventoryState();
+
+  void search(String query) {
+    if (query.isEmpty) {
+      state = state.copyWith(filteredItems: state.allItems);
+      return;
+    }
+    final filtered = state.allItems
+        .where((item) => item.matches(query))
+        .toList();
+    state = state.copyWith(filteredItems: filtered);
   }
 
-  Future<void> parseCsvData(String csvString) async {
+  Future<void> parseCsvData(String csvContent) async {
     state = state.copyWith(isLoading: true);
 
     try {
-      // Parse CSV
-      List<List<dynamic>> rows = const CsvToListConverter().convert(
-        csvString,
-        eol: '\n',
-      );
+      final List<InventoryItem> newItems = [];
+      final List<String> lines = const LineSplitter().convert(csvContent);
 
-      List<InventoryItem> parsedItems = [];
-      String currentWarehouse = 'Main';
-      String currentBrand = 'Other';
-      bool dataStarted = false;
+      String delimiter = ',';
+      if (lines.any((l) => l.contains(';'))) {
+        delimiter = ';';
+      }
 
-      for (var row in rows) {
-        if (row.length < 3) continue;
+      int colSku = -1;
+      int colName = -1;
+      int colQty = -1;
+      bool headerFound = false;
 
-        String colA = row[0].toString().trim();
-        String colB = row[1].toString().trim(); // SKU
-        String colC = row[2].toString().trim(); // Qty
+      for (var line in lines) {
+        if (line.trim().isEmpty) continue;
 
-        // Detect Warehouse (specific to your 1C format)
-        if (colA.startsWith('33701_')) {
-          currentWarehouse = colA.split(' ').sublist(0, 2).join(' ');
-          dataStarted = true;
+        final List<String> cells = line
+            .split(delimiter)
+            .map((e) => e.trim())
+            .toList();
+
+        if (!headerFound) {
+          final lowerCells = cells.map((e) => e.toLowerCase()).toList();
+          if (lowerCells.contains('артикул') && lowerCells.contains('товар')) {
+            headerFound = true;
+            for (int i = 0; i < cells.length; i++) {
+              final val = cells[i].toLowerCase();
+              if (val.contains('артикул')) {
+                colSku = i;
+              } else if (val.contains('товар')) {
+                colName = i;
+              } else if (val.contains('количество')) {
+                colQty = i;
+              }
+            }
+          }
           continue;
         }
 
-        if (!dataStarted) continue;
+        if (headerFound && colSku != -1 && colName != -1 && colQty != -1) {
+          if (cells.length <= colQty) continue;
 
-        // Detect Brand (Text in A, Empty B, Number in C)
-        if (colB.isEmpty && colA.isNotEmpty && double.tryParse(colC) != null) {
-          currentBrand = colA;
-          continue;
-        }
+          String sku = cells[colSku];
+          String name = cells[colName];
+          String qtyStr = cells[colQty];
 
-        // Detect Item (Has SKU)
-        if (colB.isNotEmpty) {
-          parsedItems.add(
-            InventoryItem(
-              name: colA,
-              sku: colB,
-              quantity: double.tryParse(colC) ?? 0.0,
-              brand: currentBrand,
-              warehouse: currentWarehouse,
-            ),
-          );
+          if (sku.isEmpty || name.isEmpty) continue;
+
+          qtyStr = qtyStr.replaceAll(RegExp(r'\s+'), '').replaceAll(',', '.');
+          double qty = double.tryParse(qtyStr) ?? 0;
+
+          if (qty > 0) {
+            newItems.add(
+              InventoryItem(
+                id: sku, // FIX: Added required id
+                sku: sku,
+                name: name,
+                quantity: qty,
+                brand: _extractBrand(name),
+                warehouse: "Основной склад",
+                category: "Общее",
+              ),
+            );
+          }
         }
       }
 
       state = state.copyWith(
         isLoading: false,
-        allItems: parsedItems,
-        filteredItems: parsedItems,
+        allItems: newItems,
+        filteredItems: newItems,
       );
     } catch (e) {
       state = state.copyWith(isLoading: false);
-      // Use standard logging in production apps, avoided print for linter compliance
-      // log("Error parsing CSV: $e");
     }
   }
 
-  void search(String query) {
-    final filtered = state.allItems.where((item) {
-      final matchesSearch = item.matches(query);
-      final matchesWarehouse =
-          state.selectedWarehouse == 'All' ||
-          item.warehouse == state.selectedWarehouse;
-      return matchesSearch && matchesWarehouse;
-    }).toList();
-
-    state = state.copyWith(searchQuery: query, filteredItems: filtered);
+  String _extractBrand(String name) {
+    final parts = name.split(' ');
+    if (parts.length > 2 && parts[0].toLowerCase() == 'холодильник') {
+      return parts[1];
+    }
+    if (parts.length > 2 && parts[0].toLowerCase() == 'стиральная') {
+      return parts[2];
+    }
+    if (parts.length > 1) return parts[0];
+    return "N/A";
   }
 }
 
-// FIX: Use NotifierProvider instead of StateNotifierProvider
 final inventoryProvider = NotifierProvider<InventoryNotifier, InventoryState>(
-  InventoryNotifier.new,
+  () => InventoryNotifier(),
 );

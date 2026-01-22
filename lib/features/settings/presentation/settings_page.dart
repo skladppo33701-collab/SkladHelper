@@ -852,7 +852,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     if (image == null) return;
 
-    // 1. CROP (Uses your existing cropper helper)
+    // 1. CROP (Safe for web via helper)
     final String? processedPath = await cropImageIfPossible(image);
     if (processedPath == null) return;
 
@@ -862,8 +862,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       const String cloudName = "dukgkpmqw";
       const String uploadPreset = "sklad_helper_preset";
 
-      // FIX: Use the new helper.
-      // This completely hides 'MultipartFile.fromFile' from the Web compiler.
+      // FIX: Use the helper function.
+      // This is the ONLY way to hide 'MultipartFile.fromFile' from the Web compiler.
       final MultipartFile fileToUpload = await prepareUploadFile(
         processedPath,
         image,
