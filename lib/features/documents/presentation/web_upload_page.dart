@@ -60,7 +60,6 @@ class _WebUploadPageState extends State<WebUploadPage> {
         _pickedFile!.name,
       );
 
-      // ← Вот здесь самое важное место
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(

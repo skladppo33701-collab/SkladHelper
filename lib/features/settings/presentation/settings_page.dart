@@ -11,7 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:sklad_helper_33701/core/utils/cropper/cropper_helper.dart';
 import 'package:sklad_helper_33701/features/inventory/providers/task_stats_provider.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart'; // for kIsWeb
+import 'package:sklad_helper_33701/core/utils/upload/upload_helper.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -840,7 +840,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _updateProfilePicture(BuildContext context, String uid) async {
     final theme = Theme.of(context);
-    // final isDark = theme.brightness == Brightness.dark; // Unused if using helper
     final proColors = theme.extension<SkladColors>()!;
 
     final picker = ImagePicker();
@@ -853,10 +852,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     if (image == null) return;
 
-    // FIX 1: Use the conditional import helper we created.
-    // This safely crops on Mobile and skips cropping on Web.
+    // 1. CROP (Uses your existing cropper helper)
     final String? processedPath = await cropImageIfPossible(image);
-
     if (processedPath == null) return;
 
     setState(() => _isUploading = true);
@@ -865,20 +862,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       const String cloudName = "dukgkpmqw";
       const String uploadPreset = "sklad_helper_preset";
 
-      // FIX 2: Prepare the file for upload differently for Web vs Mobile
-      MultipartFile fileToUpload;
-
-      if (kIsWeb) {
-        // Web: Read as bytes (Path is a Blob URL, cannot be opened as File)
-        final bytes = await XFile(processedPath).readAsBytes();
-        fileToUpload = MultipartFile.fromBytes(
-          bytes,
-          filename: 'pfp_upload.jpg',
-        );
-      } else {
-        // Mobile: Open file from path
-        fileToUpload = await MultipartFile.fromFile(processedPath);
-      }
+      // FIX: Use the new helper.
+      // This completely hides 'MultipartFile.fromFile' from the Web compiler.
+      final MultipartFile fileToUpload = await prepareUploadFile(
+        processedPath,
+        image,
+      );
 
       FormData formData = FormData.fromMap({
         "file": fileToUpload,

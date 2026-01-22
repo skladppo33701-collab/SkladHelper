@@ -35,8 +35,16 @@ class SkladApp extends ConsumerWidget {
       themeMode: themeMode,
       theme: SkladTheme.lightTheme,
       darkTheme: SkladTheme.darkTheme,
-      localizationsDelegates: const [GlobalMaterialLocalizations.delegate],
+
+      // FIX: Add all necessary delegates here
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate, // Required for text direction
+        GlobalCupertinoLocalizations
+            .delegate, // Required for text fields/copy-paste
+      ],
       supportedLocales: const [Locale('ru')],
+
       home: const AuthGate(),
     );
   }
@@ -47,29 +55,21 @@ class AuthGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 1. Listen to raw Firebase Auth State
     final authState = ref.watch(authStateProvider);
-    // 2. Listen to Database Profile State
     final userRoleAsync = ref.watch(userRoleProvider);
 
     return authState.when(
       data: (firebaseUser) {
-        // CASE A: User is NOT logged in to Firebase
         if (firebaseUser == null) {
           return const LoginScreen();
         }
 
-        // CASE B: User IS logged in. Now check their Database Profile.
         return userRoleAsync.when(
           data: (appUser) {
-            // FIX: If Firebase User exists but AppUser (DB) is null,
-            // it means the profile is being created. Do NOT show LoginScreen.
             if (appUser == null) {
-              // Trigger a retry or just wait for the stream to update
               return const _LoadingScaffold(message: "Создание профиля...");
             }
 
-            // Route based on Role
             switch (appUser.role) {
               case UserRole.manager:
                 return const ManagerDashboard();
@@ -82,7 +82,6 @@ class AuthGate extends ConsumerWidget {
                 );
             }
           },
-          // While fetching the database profile...
           loading: () => const _LoadingScaffold(message: "Загрузка данных..."),
           error: (err, stack) => _ErrorScaffold(
             message: "Ошибка профиля: $err",
@@ -90,12 +89,9 @@ class AuthGate extends ConsumerWidget {
           ),
         );
       },
-      // While checking if user is logged in...
       loading: () => const _LoadingScaffold(message: "Проверка входа..."),
-      error: (err, stack) => _ErrorScaffold(
-        message: "Ошибка авторизации: $err",
-        onLogout: null, // Can't logout if we aren't sure we are logged in
-      ),
+      error: (err, stack) =>
+          _ErrorScaffold(message: "Ошибка авторизации: $err", onLogout: null),
     );
   }
 }
