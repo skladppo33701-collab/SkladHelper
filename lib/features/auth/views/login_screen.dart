@@ -6,9 +6,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
-import 'package:flutter/foundation.dart';
-import 'package:google_sign_in_web/google_sign_in_web.dart' as web;
-import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
+import 'package:flutter/foundation.dart'; // Required for kIsWeb
+import 'package:google_sign_in_web/google_sign_in_web.dart'
+    as web; // Required for GSIButton types
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart'; // Required for GoogleSignInPlatform
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -217,19 +218,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Widget _buildPillGoogleButton(SkladColors proColors) {
     if (kIsWeb) {
-      return Center(
-        child: (GoogleSignInPlatform.instance as web.GoogleSignInPlugin).renderButton(
-          configuration: web.GSIButtonConfiguration(
-            shape: web.GSIButtonShape.pill,
-            // Fix: The enum constant is usually 'filledBlue' or 'filledBlack' or 'outline'
-            theme: web.GSIButtonTheme.outline,
-            // Fix: Width is often set via constraints or is implicit in newer versions
+      final initStatus = ref.watch(googleSignInInitProvider);
+
+      return initStatus.when(
+        data: (_) => Center(
+          child: (GoogleSignInPlatform.instance as web.GoogleSignInPlugin)
+              .renderButton(
+                configuration: web.GSIButtonConfiguration(
+                  shape: web.GSIButtonShape.pill,
+                  theme: web.GSIButtonTheme.outline,
+                ),
+              ),
+        ),
+        loading: () => const Center(
+          child: SizedBox(
+            height: 24,
+            width: 24,
+            child: CircularProgressIndicator(),
           ),
         ),
+        error: (err, stack) => Text('Ошибка: $err'),
       );
     }
 
-    // Android/iOS Custom Button (Your existing code)
+    // FIX: Match the actual method name below
+    return _buildMobileButton(proColors);
+  }
+
+  Widget _buildMobileButton(SkladColors proColors) {
     return SizedBox(
       height: 56,
       child: OutlinedButton(
@@ -241,7 +257,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             borderRadius: BorderRadius.circular(50),
           ),
           side: BorderSide.none,
-          elevation: 0,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -251,22 +266,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               height: 24,
               child: SvgPicture.network(
                 'https://www.svgrepo.com/show/475656/google-color.svg',
-                placeholderBuilder: (_) => const Icon(
-                  Icons.g_mobiledata,
-                  color: Colors.black,
-                  size: 28,
-                ),
               ),
             ),
             const SizedBox(width: 12),
-            Text(
-              'Google',
-              style: GoogleFonts.inter(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
+            const Text('Google'),
           ],
         ),
       ),
@@ -506,6 +509,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
+  final googleSignInInitProvider = FutureProvider<void>((ref) async {
+    if (kIsWeb) {
+      // We access the platform interface directly to call initWithParams
+      await (GoogleSignInPlatform.instance as web.GoogleSignInPlugin)
+          .initWithParams(
+            const SignInInitParameters(
+              clientId:
+                  '437534842036-9agg2s1gh3q02hijoagnhpulvgmtc3n0.apps.googleusercontent.com',
+              scopes: ['email', 'profile'],
+            ),
+          );
+    }
+  });
   Future<void> _sendPasswordReset(BuildContext context, String email) async {
     try {
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
