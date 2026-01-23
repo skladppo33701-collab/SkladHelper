@@ -1,15 +1,15 @@
+import 'dart:typed_data';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cross_file/cross_file.dart';
+import 'package:intl/intl.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:convert';
-import 'dart:typed_data';
-import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
-
-import '../providers/inventory_provider.dart';
-import '../models/inventory_item.dart';
-import 'scanner_page.dart';
+import 'package:sklad_helper_33701/features/assignments/models/assignment_model.dart';
+import 'package:sklad_helper_33701/features/assignments/providers/assignment_provider.dart';
+import 'package:uuid/uuid.dart';
+import 'package:sklad_helper_33701/features/assignments/views/assignment_details_page.dart'; //← Relative import fix – adjust if your folders are different
 
 class InventoryPage extends ConsumerStatefulWidget {
   const InventoryPage({super.key});
@@ -18,350 +18,422 @@ class InventoryPage extends ConsumerStatefulWidget {
   ConsumerState<InventoryPage> createState() => _InventoryPageState();
 }
 
-class _InventoryPageState extends ConsumerState<InventoryPage> {
+class _InventoryPageState extends ConsumerState<InventoryPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
 
-  Future<void> _pickAndLoadCsv() async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv', 'txt', 'xls', 'xlsx'],
-        withData: true,
-      );
+  bool _isDragging = false;
+  bool _isProcessingDrop = false;
 
-      if (result != null) {
-        final PlatformFile file = result.files.single;
-        final Uint8List? bytes = file.bytes;
-        final String name = file.name.toLowerCase();
-
-        if (bytes == null) {
-          throw Exception("Не удалось прочитать файл (пустые данные)");
-        }
-
-        String contentToParse = "";
-
-        if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
-          var decoder = SpreadsheetDecoder.decodeBytes(bytes, update: true);
-          StringBuffer buffer = StringBuffer();
-
-          for (var table in decoder.tables.keys) {
-            var sheet = decoder.tables[table];
-            if (sheet != null) {
-              for (var row in sheet.rows) {
-                String line = row.map((e) => e?.toString() ?? "").join(";");
-                buffer.writeln(line);
-              }
-            }
-          }
-          contentToParse = buffer.toString();
-        } else {
-          contentToParse = utf8.decode(bytes, allowMalformed: true);
-        }
-
-        ref.read(inventoryProvider.notifier).parseCsvData(contentToParse);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Файл успешно загружен')),
-          );
-        }
-      }
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка загрузки: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _openScanner() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ScannerPage()));
-  }
+  late AnimationController _pulseCtrl;
+  late Animation<double> _pulseAnim;
 
   @override
-  Widget build(BuildContext context) {
-    final invState = ref.watch(inventoryProvider);
-    final proColors = Theme.of(context).extension<SkladColors>()!;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
 
-    return Scaffold(
-      backgroundColor: proColors.surfaceLow,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                color: proColors.surfaceHigh,
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "Складской учет",
-                        style: GoogleFonts.inter(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: isDark
-                              ? Colors.white
-                              : const Color(0xFF0F172A),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _pickAndLoadCsv,
-                        icon: Icon(
-                          Icons.upload_file,
-                          color: proColors.accentAction,
-                        ),
-                        tooltip: "Загрузить отчет 1С",
-                        style: IconButton.styleFrom(
-                          backgroundColor: proColors.accentAction.withValues(
-                            alpha: 0.1,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _searchController,
-                    onChanged: (val) =>
-                        ref.read(inventoryProvider.notifier).search(val),
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Поиск товара, артикула...',
-                      hintStyle: TextStyle(color: proColors.neutralGray),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: proColors.neutralGray,
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          Icons.qr_code_scanner,
-                          color: proColors.accentAction,
-                        ),
-                        onPressed: _openScanner,
-                      ),
-                      filled: true,
-                      fillColor: isDark
-                          ? Colors.white.withValues(alpha: 0.05)
-                          : const Color(0xFFF1F5F9),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (invState.allItems.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Row(
-                  children: [
-                    Text(
-                      "Всего: ${invState.filteredItems.length} поз.",
-                      style: TextStyle(
-                        color: proColors.neutralGray,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    Icon(
-                      Icons.filter_list,
-                      size: 16,
-                      color: proColors.neutralGray,
-                    ),
-                  ],
-                ),
-              ),
-            Expanded(
-              child: invState.isLoading
-                  ? Center(
-                      child: CircularProgressIndicator(
-                        color: proColors.accentAction,
-                      ),
-                    )
-                  : invState.allItems.isEmpty
-                  ? _buildEmptyState(proColors, isDark)
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      itemCount: invState.filteredItems.length,
-                      itemBuilder: (context, index) {
-                        final item = invState.filteredItems[index];
-                        return _buildInventoryCard(item, proColors, isDark);
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.10).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOutCubic),
     );
   }
 
-  Widget _buildEmptyState(SkladColors proColors, bool isDark) {
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Stub parser – replace with your real SpreadsheetDecoder / PDF logic later
+  Future<Map<String, dynamic>> _parseDocument(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    // TODO: Implement real parsing here (Excel / CSV / PDF)
+    // For now we return dummy data so the app runs and you can test the flow
+    return {
+      'title': 'Накладная №${DateTime.now().millisecondsSinceEpoch % 10000}',
+      'type': 'Накладная на перемещение',
+      'items': [
+        {'name': 'Холодильник Samsung RF-123', 'code': 'RF-123', 'qty': 2},
+        {'name': 'Стиральная машина LG WM-456', 'code': 'WM-456', 'qty': 1},
+        {'name': 'Микроволновка Bosch', 'code': 'MW-789', 'qty': 3},
+      ],
+    };
+  }
+
+  Future<void> _createAssignmentFromFile(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    try {
+      final parsed = await _parseDocument(bytes, fileName);
+
+      final itemsList = parsed['items'] as List<dynamic>;
+      final title =
+          parsed['title'] as String? ??
+          'Документ от ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}';
+      final type = parsed['type'] as String? ?? 'Документ';
+
+      final items = itemsList.map((m) {
+        final map = m as Map<String, dynamic>;
+        return AssignmentItem(
+          name: map['name']?.toString() ?? '—',
+          code: map['code']?.toString() ?? '',
+          requiredQty: (map['qty'] as num?)?.toDouble() ?? 0.0,
+        );
+      }).toList();
+
+      final assignment = Assignment(
+        id: const Uuid().v4(),
+        name: title,
+        type: type,
+        createdAt: DateTime.now(),
+        items: items,
+      );
+
+      ref.read(assignmentsProvider.notifier).addAssignment(assignment);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Задание создано: $title'),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } catch (e, stack) {
+      debugPrint('Ошибка парсинга: $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Не удалось создать задание: $e'),
+            backgroundColor: Colors.red.shade800,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleDroppedFiles(List<XFile> files) async {
+    if (files.isEmpty) return;
+
+    setState(() {
+      _isProcessingDrop = true;
+      _isDragging = false;
+    });
+
+    final allowed = {'csv', 'txt', 'xls', 'xlsx'};
+    bool anySuccess = false;
+
+    for (final file in files) {
+      final ext = file.name.split('.').last.toLowerCase();
+      if (!allowed.contains(ext)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Пропущен: ${file.name} (неподдерживаемый формат)'),
+              backgroundColor: Colors.orange.shade800,
+            ),
+          );
+        }
+        continue;
+      }
+
+      try {
+        final bytes = await file.readAsBytes();
+        await _createAssignmentFromFile(bytes, file.name);
+        anySuccess = true;
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка файла ${file.name}: $e'),
+              backgroundColor: Colors.red.shade800,
+            ),
+          );
+        }
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    if (mounted) {
+      setState(() => _isProcessingDrop = false);
+
+      if (anySuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Файлы успешно обработаны'),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildEmptyPlaceholder() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.folder_open_outlined,
-            size: 64,
-            color: proColors.neutralGray.withValues(alpha: 0.3),
+          Icon(Icons.folder_open_outlined, size: 80, color: Colors.grey),
+          const SizedBox(height: 24),
+          const Text(
+            'Нет активных заданий',
+            style: TextStyle(fontSize: 20, color: Colors.grey),
           ),
-          const SizedBox(height: 16),
-          Text(
-            "Нет данных",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white70 : Colors.black54,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: _pickAndLoadCsv,
-            icon: const Icon(Icons.upload_file),
-            label: const Text("Загрузить файл 1С (.csv)"),
-            style: TextButton.styleFrom(
-              foregroundColor: proColors.accentAction,
-            ),
+          const SizedBox(height: 12),
+          const Text(
+            'Перетащите файл или используйте кнопку загрузки',
+            style: TextStyle(color: Colors.grey),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInventoryCard(
-    InventoryItem item,
-    SkladColors proColors,
-    bool isDark,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: proColors.surfaceHigh,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.05)
-              : Colors.black.withValues(alpha: 0.05),
-        ),
-        boxShadow: [
-          if (!isDark)
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<SkladColors>()!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final assignments = ref.watch(assignmentsProvider);
+
+    return Scaffold(
+      backgroundColor: colors.surfaceLow,
+      appBar: AppBar(title: const Text('Задания / Накладные')),
+      body: DropTarget(
+        onDragEntered: (_) => setState(() => _isDragging = true),
+        onDragExited: (_) => setState(() => _isDragging = false),
+        onDragDone: (detail) => _handleDroppedFiles(detail.files),
+        child: Stack(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: proColors.accentAction.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    item.brand.toUpperCase(),
-                    style: TextStyle(
-                      color: proColors.accentAction,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+            SafeArea(
+              child: Column(
+                children: [
+                  // Поиск (опционально)
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Поиск задания...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: isDark ? Colors.grey.shade900 : Colors.white,
+                      ),
                     ),
                   ),
-                ),
-                Text(
-                  "${item.quantity.toStringAsFixed(0)} шт.",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: item.quantity > 0
-                        ? (isDark ? Colors.white : Colors.black87)
-                        : proColors.error,
+
+                  Expanded(
+                    child: assignments.isEmpty
+                        ? _buildEmptyPlaceholder()
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(12),
+                            itemCount: assignments.length,
+                            itemBuilder: (context, i) {
+                              final ass = assignments[i];
+                              final isCompleted =
+                                  ass.status == AssignmentStatus.completed;
+
+                              return Dismissible(
+                                key: ValueKey(ass.id),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
+                                  color: Colors.red,
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 32),
+                                  child: const Icon(
+                                    Icons.delete,
+                                    color: Colors.white,
+                                    size: 32,
+                                  ),
+                                ),
+                                onDismissed: (_) {
+                                  ref
+                                      .read(assignmentsProvider.notifier)
+                                      .deleteAssignment(ass.id);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Задание удалено'),
+                                    ),
+                                  );
+                                },
+                                child: Card(
+                                  color: isCompleted
+                                      ? colors.neutralGray.withValues(
+                                          alpha: 0.35,
+                                        )
+                                      : null,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 12,
+                                    ),
+                                    title: Text(
+                                      ass.name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: isCompleted
+                                            ? colors.neutralGray
+                                            : null,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      DateFormat(
+                                        'dd MMM yyyy • HH:mm',
+                                      ).format(ass.createdAt),
+                                      style: TextStyle(
+                                        color: colors.neutralGray,
+                                      ),
+                                    ),
+                                    trailing: isCompleted
+                                        ? const Icon(
+                                            Icons.check_circle,
+                                            color: Colors.green,
+                                          )
+                                        : null,
+                                    onTap: () async {
+                                      final confirmed = await showDialog<bool>(
+                                        context: context,
+                                        builder: (dialogContext) => AlertDialog(
+                                          title: const Text('Открыть задание?'),
+                                          content: Text(ass.name),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(
+                                                dialogContext,
+                                                false,
+                                              ),
+                                              child: const Text('Отмена'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(
+                                                dialogContext,
+                                                true,
+                                              ),
+                                              child: const Text('Открыть'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+
+                                      if (confirmed == true &&
+                                          context.mounted) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                AssignmentDetailsPage(
+                                                  assignmentId: ass.id,
+                                                ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              item.name,
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.qr_code, size: 14, color: proColors.neutralGray),
-                const SizedBox(width: 4),
-                Text(
-                  item.sku,
-                  style: TextStyle(color: proColors.neutralGray, fontSize: 12),
-                ),
-                const Spacer(),
-                Icon(
-                  Icons.warehouse_outlined,
-                  size: 14,
-                  color: proColors.neutralGray,
-                ),
-                const SizedBox(width: 4),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 150),
-                  child: Text(
-                    item.warehouse,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: proColors.neutralGray,
-                      fontSize: 12,
+
+            // Overlay при перетаскивании
+            if (_isDragging || _isProcessingDrop)
+              IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 280),
+                  child: Container(
+                    color: isDark
+                        ? Colors.grey.shade900.withValues(alpha: 0.62)
+                        : Colors.grey.shade800.withValues(alpha: 0.55),
+                    child: Center(
+                      child: ScaleTransition(
+                        scale: _isProcessingDrop
+                            ? Tween<double>(begin: 0.88, end: 1.0).animate(
+                                CurvedAnimation(
+                                  parent: AnimationController(
+                                    vsync: this,
+                                    duration: const Duration(milliseconds: 650),
+                                  )..forward(),
+                                  curve: Curves.elasticOut,
+                                ),
+                              )
+                            : _pulseAnim,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 420),
+                              transitionBuilder: (child, anim) =>
+                                  FadeTransition(
+                                    opacity: anim,
+                                    child: ScaleTransition(
+                                      scale: anim,
+                                      child: child,
+                                    ),
+                                  ),
+                              child: Icon(
+                                _isProcessingDrop
+                                    ? Icons.cloud_done_rounded
+                                    : Icons.cloud_upload_outlined,
+                                key: ValueKey<bool>(_isProcessingDrop),
+                                size: 100,
+                                color: _isProcessingDrop
+                                    ? colors.accentAction
+                                    : Colors.white.withValues(alpha: 0.92),
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            Text(
+                              _isProcessingDrop
+                                  ? 'Обработка...'
+                                  : 'Отпустите файлы',
+                              style: GoogleFonts.inter(
+                                fontSize: 27,
+                                fontWeight: FontWeight.w700,
+                                color: _isProcessingDrop
+                                    ? colors.accentAction
+                                    : Colors.white.withValues(alpha: 0.96),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Поддерживаются: .csv .txt .xls .xlsx',
+                              style: GoogleFonts.inter(
+                                fontSize: 15,
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
           ],
         ),
       ),

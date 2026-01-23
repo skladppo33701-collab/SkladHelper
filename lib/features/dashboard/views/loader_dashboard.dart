@@ -12,7 +12,7 @@ class LoaderDashboard extends StatefulWidget {
 class _LoaderDashboardState extends State<LoaderDashboard> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = [const InventoryPage(), const SettingsPage()];
+  final List<Widget> _pages = [InventoryPage(), const SettingsPage()];
 
   @override
   Widget build(BuildContext context) {

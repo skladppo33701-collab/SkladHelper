@@ -1,58 +1,67 @@
-enum AssignmentStatus { pending, inProgress, completed, archived }
+enum AssignmentStatus { created, inProgress, completed }
 
 class AssignmentItem {
-  final String sku;
   final String name;
-  final double quantity; // Total needed (e.g., 3)
-  final double scannedAmount; // Scanned so far (e.g., 1)
+  final String code; // or sku
+  final double requiredQty;
+  double scannedQty;
 
-  const AssignmentItem({
-    required this.sku,
+  AssignmentItem({
     required this.name,
-    required this.quantity,
-    this.scannedAmount = 0,
+    required this.code,
+    required this.requiredQty,
+    this.scannedQty = 0.0,
   });
 
-  // Helper: Is this specific item fully done?
-  bool get isFullyScanned => scannedAmount >= quantity;
+  bool get isCompleted => scannedQty >= requiredQty;
 
-  // Helper: "1/3" or just "1"
-  String get progressText => "${scannedAmount.toInt()}/${quantity.toInt()}";
+  // FIX: Correct string interpolation
+  String get progressText => '${scannedQty.toInt()}/${requiredQty.toInt()}';
 
-  AssignmentItem copyWith({double? scannedAmount}) {
+  AssignmentItem copyWith({double? scannedQty}) {
     return AssignmentItem(
-      sku: sku,
       name: name,
-      quantity: quantity,
-      scannedAmount: scannedAmount ?? this.scannedAmount,
+      code: code,
+      requiredQty: requiredQty,
+      scannedQty: scannedQty ?? this.scannedQty,
     );
   }
 }
 
-class WarehouseAssignment {
+class Assignment {
   final String id;
-  final String type; // "Накладная на перемещение"
-  final String number; // "№ 52"
-  final String date; // "22 января 2026 г."
-  final List<AssignmentItem> items;
-  final AssignmentStatus status;
+  final String name;
+  final String type;
   final DateTime createdAt;
+  final List<AssignmentItem> items;
+  AssignmentStatus status;
 
-  WarehouseAssignment({
+  Assignment({
     required this.id,
+    required this.name,
     required this.type,
-    required this.number,
-    required this.date,
-    required this.items,
-    this.status = AssignmentStatus.pending,
     required this.createdAt,
+    required this.items,
+    this.status = AssignmentStatus.created,
   });
 
-  // Computed: 0.0 to 1.0
-  double get progress {
-    if (items.isEmpty) return 0;
-    final total = items.fold(0.0, (sum, i) => sum + i.quantity);
-    final scanned = items.fold(0.0, (sum, i) => sum + i.scannedAmount);
-    return scanned / total;
+  Assignment copyWith({
+    String? id,
+    String? name,
+    String? type,
+    DateTime? createdAt,
+    List<AssignmentItem>? items,
+    AssignmentStatus? status,
+  }) {
+    return Assignment(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      createdAt: createdAt ?? this.createdAt,
+      items: items ?? this.items,
+      status: status ?? this.status,
+    );
   }
+
+  bool get isReadyToComplete => items.every((i) => i.isCompleted);
 }

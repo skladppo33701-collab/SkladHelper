@@ -1,79 +1,73 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/assignment_model.dart';
-import '../services/assignment_parser.dart';
 
-class AssignmentNotifier extends Notifier<List<WarehouseAssignment>> {
+// Make sure these imports point to your actual files
+import '../models/assignment_model.dart'; // contains Assignment, AssignmentItem, AssignmentStatus
+// import 'package:uuid/uuid.dart';               // if Uuid is used in model
+
+final assignmentsProvider =
+    NotifierProvider<AssignmentNotifier, List<Assignment>>(
+      AssignmentNotifier.new,
+    );
+
+class AssignmentNotifier extends Notifier<List<Assignment>> {
   @override
-  List<WarehouseAssignment> build() => [];
+  List<Assignment> build() {
+    return []; // initial empty list
+  }
 
-  void importFromCsv(String csvContent) {
-    final assignment = AssignmentParser().parseCsv(csvContent);
+  void addAssignment(Assignment assignment) {
     state = [...state, assignment];
   }
 
-  /// The Core Scanning Logic
-  /// Returns [true] if scan was valid (item found and incremented)
-  bool scanItem(String assignmentId, String scannedBarcode) {
-    bool found = false;
-
+  /// Increment scanned quantity for a specific item in a specific assignment
+  void updateItemScan(
+    String assignmentId,
+    String itemCode, {
+    required double increment,
+  }) {
     state = [
-      for (final assignment in state)
-        if (assignment.id == assignmentId)
-          _processScan(assignment, scannedBarcode, (isValid) => found = isValid)
+      for (final ass in state)
+        if (ass.id == assignmentId)
+          _updateScanned(ass, itemCode, increment)
         else
-          assignment,
+          ass,
     ];
-
-    return found;
   }
 
-  WarehouseAssignment _processScan(
-    WarehouseAssignment task,
-    String barcode,
-    Function(bool) onResult,
-  ) {
-    // 1. Find the item that needs this SKU
-    final index = task.items.indexWhere(
-      (item) => item.sku == barcode && !item.isFullyScanned,
-    );
+  Assignment _updateScanned(Assignment ass, String code, double inc) {
+    final newItems = ass.items.map((item) {
+      if (item.code == code) {
+        return item.copyWith(scannedQty: item.scannedQty + inc);
+      }
+      return item;
+    }).toList();
 
-    if (index == -1) {
-      onResult(false); // Not found or already done
-      return task;
-    }
+    final newStatus = newItems.every((i) => i.isCompleted)
+        ? AssignmentStatus.completed
+        : AssignmentStatus.inProgress;
 
-    // 2. Increment count (1/3 -> 2/3)
-    final newItems = [...task.items];
-    final current = newItems[index];
-
-    newItems[index] = current.copyWith(
-      scannedAmount: current.scannedAmount + 1,
-    );
-
-    onResult(true);
-
-    // 3. Auto-update status if ALL items are done
-    final isComplete = newItems.every((i) => i.isFullyScanned);
-    return WarehouseAssignment(
-      id: task.id,
-      type: task.type,
-      number: task.number,
-      date: task.date,
-      createdAt: task.createdAt,
-      items: newItems,
-      status: isComplete
-          ? AssignmentStatus.completed
-          : AssignmentStatus.inProgress,
-    );
+    return ass.copyWith(items: newItems, status: newStatus);
   }
 
-  void archiveAssignment(String id) {
+  void completeAssignment(String id) {
+    state = [
+      for (final ass in state)
+        if (ass.id == id)
+          ass.copyWith(status: AssignmentStatus.completed)
+        else
+          ass,
+    ];
+  }
+
+  void deleteAssignment(String id) {
     state = state.where((a) => a.id != id).toList();
-    // In a real app, save to Firestore 'archive' collection here
+  }
+
+  // Optional: archive method (if you want to move to archive instead of delete)
+  void archiveAssignment(String id) {
+    // You can either remove it or mark as archived
+    // Example: just remove for now (same as delete)
+    deleteAssignment(id);
+    // Or: find and change status to archived if you add such enum value
   }
 }
-
-final assignmentProvider =
-    NotifierProvider<AssignmentNotifier, List<WarehouseAssignment>>(
-      AssignmentNotifier.new,
-    );

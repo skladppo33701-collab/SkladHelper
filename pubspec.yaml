@@ -100,7 +100,8 @@ dependencies:
   google_identity_services_web: ^0.3.3+1
   uuid: ^4.5.2
   spreadsheet_decoder: ^2.3.0
-  
+  desktop_drop: ^0.7.0
+  cross_file: ^0.3.3+8
 dev_dependencies:
   flutter_test:
     sdk: flutter
