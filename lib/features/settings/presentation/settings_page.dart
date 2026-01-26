@@ -1,17 +1,60 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../core/providers/theme_provider.dart';
-import '../../auth/providers/auth_provider.dart';
-import '../../auth/models/user_model.dart';
-import 'package:sklad_helper_33701/core/theme.dart';
-import 'package:sklad_helper_33701/shared/widgets/dialog_utils.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:sklad_helper_33701/core/utils/cropper/cropper_helper.dart';
-import 'package:sklad_helper_33701/features/inventory/providers/task_stats_provider.dart';
 import 'package:dio/dio.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+// Absolute imports for project structure stability
+import 'package:sklad_helper_33701/core/providers/theme_provider.dart';
+import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
+import 'package:sklad_helper_33701/features/auth/models/user_model.dart';
+import 'package:sklad_helper_33701/core/theme.dart';
+import 'package:sklad_helper_33701/core/utils/cropper/cropper_helper.dart';
 import 'package:sklad_helper_33701/core/utils/upload/upload_helper.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE PROVIDERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+class VibrationNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+  void set(bool val) => state = val;
+}
+
+final vibrationProvider = NotifierProvider<VibrationNotifier, bool>(
+  VibrationNotifier.new,
+);
+
+class NotificationNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+  void toggle() => state = !state;
+}
+
+final notificationsProvider = NotifierProvider<NotificationNotifier, bool>(
+  NotificationNotifier.new,
+);
+
+final userCreatedTasksProvider = StreamProvider.autoDispose<int>((ref) {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return Stream.value(0);
+
+  // Changed collection from 'assignments' to 'tasks'
+  return FirebaseFirestore.instance
+      .collection('tasks')
+      .where('creatorId', isEqualTo: user.uid)
+      .snapshots()
+      .map((s) => s.docs.length);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS PAGE (Sovereign Design System)
+// ─────────────────────────────────────────────────────────────────────────────
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -22,324 +65,862 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _isUploading = false;
+  String _appVersion = '';
 
-  // ───────────────── PASSWORD RESET FLOW ─────────────────
-  Future<void> _showPasswordResetConfirmation(
-    BuildContext context,
-    String email,
-  ) async {
-    final proColors = Theme.of(context).extension<SkladColors>()!;
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
 
-    if (email.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Введите email для сброса')));
-      return;
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) setState(() => _appVersion = info.version);
+    } catch (_) {
+      if (mounted) setState(() => _appVersion = '1.0');
     }
-
-    await DialogUtils.showSkladDialog(
-      context: context,
-      title: 'Сброс пароля',
-      icon: Icons.lock_reset_outlined,
-      primaryButtonText: 'Отправить',
-      secondaryButtonText: 'Отмена',
-      showWarning: true,
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Мы отправим ссылку для сброса пароля на вашу почту:',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Text(
-              email,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ],
-      ),
-      onPrimaryTap: () async {
-        Navigator.pop(context);
-
-        try {
-          await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-          if (!context.mounted) return;
-
-          await DialogUtils.showSkladDialog(
-            context: context,
-            title: 'Письмо отправлено',
-            icon: Icons.mark_email_read_outlined,
-            primaryButtonText: 'Понятно',
-            accentColorOverride: proColors.success,
-            showWarning: true,
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 8),
-                const Text(
-                  'Инструкции по сбросу пароля были успешно отправлены на адрес:',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  email,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-            onPrimaryTap: () => Navigator.pop(context),
-          );
-        } catch (e) {
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка: ${e.toString()}'),
-              backgroundColor: proColors.error,
-            ),
-          );
-        }
-      },
-      onSecondaryTap: () => Navigator.pop(context),
-    );
   }
 
-  // ───────────────── EMAIL CHANGE FLOW ─────────────────
-  Future<void> _updateEmail(
-    BuildContext context,
-    String currentEmail,
-    bool isDark,
-  ) async {
-    final controller = TextEditingController(text: currentEmail);
-    final proColors = Theme.of(context).extension<SkladColors>()!;
+  // --- Sovereign Notifications (Consistent with Inventory Page) ---
+  void _showSovereignNotification(
+    String message,
+    IconData icon,
+    Color accentColor,
+    SkladColors colors,
+  ) {
+    if (!mounted) return;
 
-    await DialogUtils.showSkladDialog(
-      context: context,
-      title: 'Изменение почты',
-      icon: Icons.email_outlined,
-      primaryButtonText: 'Отправить',
-      secondaryButtonText: 'Отмена',
-      showWarning: true,
-      warningText:
-          'После отправки проверьте новый адрес — придёт письмо для подтверждения',
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Введите новый адрес электронной почты',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.done,
-              textAlign: TextAlign.center,
-              cursorColor: proColors.accentAction,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: proColors.accentAction,
-                fontSize: 16,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        elevation: 0,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.transparent,
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: colors.surfaceHigh.withValues(alpha: 0.98),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                hintText: "новый@email.com",
-              ),
-            ),
+            ],
           ),
-        ],
-      ),
-      onPrimaryTap: () {
-        // your logic
-        Navigator.pop(context);
-      },
-      onSecondaryTap: () => Navigator.pop(context),
-    );
-  }
-
-  // --- CHANGING PROFILE NAME ---
-  Future<void> _updateProfileName(
-    BuildContext context,
-    String currentName,
-    bool isDark,
-  ) async {
-    final controller = TextEditingController(text: currentName);
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final textTheme = theme.textTheme;
-    final proColors = Theme.of(context).extension<SkladColors>()!;
-
-    return showDialog(
-      context: context,
-      builder: (context) => Theme(
-        data: theme.copyWith(
-          textSelectionTheme: TextSelectionThemeData(
-            selectionHandleColor: proColors.accentAction,
-            selectionColor: proColors.accentAction.withValues(alpha: 0.2),
-            cursorColor: proColors.accentAction,
-          ),
-        ),
-        child: AlertDialog(
-          backgroundColor: colors.surface,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-            side: BorderSide(
-              color: colors.outlineVariant.withValues(alpha: 0.5),
-            ),
-          ),
-          titlePadding: EdgeInsets.zero,
-          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-          title: DialogUtils.buildUnifiedHeader(
-            icon: Icons.person_outline,
-            title: 'Изменить имя и фамилию',
-            color: proColors.accentAction,
-            colors: colors,
-            textTheme: textTheme,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              Text(
-                'Ваше текущее имя и фамилия. Вы можете изменить их ниже:',
-                textAlign: TextAlign.center,
-                style: textTheme.bodyMedium?.copyWith(
-                  height: 1.4,
-                  color: colors.onSurface.withValues(alpha: 0.7),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
                 ),
+                child: Icon(icon, color: accentColor, size: 20),
               ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                keyboardType: TextInputType
-                    .emailAddress, // or TextInputType.name for name dialog
-                textInputAction: TextInputAction.done,
-                textAlign: TextAlign.center,
-                cursorColor: proColors.accentAction,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: proColors.accentAction,
-                  fontSize: 16,
-                ),
-                decoration: InputDecoration(
-                  hintText: "Имя Фамилия",
-                  hintStyle: TextStyle(color: Colors.white54),
-                  filled: true,
-                  fillColor: isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.black.withValues(alpha: 0.03),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: proColors.accentAction.withValues(alpha: 0.3),
-                      width: 1.0, // thin
-                    ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  message,
+                  style: GoogleFonts.inter(
+                    color: colors.contentPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: proColors.accentAction.withValues(alpha: 0.3),
-                      width: 0.5,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: proColors.accentAction, // full accent on focus
-                      width: 0.5, // slightly thicker on focus
-                    ),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ), // proper inner space
                 ),
               ),
             ],
           ),
-          actionsAlignment: MainAxisAlignment.center,
-          actionsPadding: const EdgeInsets.fromLTRB(
-            16,
-            0,
-            16,
-            16,
-          ), // ↓ less bottom padding
-          actions: [
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final userAsync = ref.watch(userRoleProvider);
+    final theme = Theme.of(context);
+    final colors = theme.extension<SkladColors>()!;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: colors.surfaceLow, // "Executive Slate" background
+      body: userAsync.when(
+        data: (user) {
+          if (user == null) return const Center(child: Text("Нет данных"));
+
+          return CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              // 1. HEADER
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 52, 24, 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Настройки',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w700,
+                          color: colors.contentPrimary,
+                          fontSize: 26,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => FirebaseAuth.instance.signOut(),
+                        icon: Icon(
+                          Icons.logout_rounded,
+                          color: colors.error,
+                          size: 20,
+                        ),
+                        style: IconButton.styleFrom(
+                          backgroundColor: colors.error.withValues(alpha: 0.1),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.all(8),
+                          minimumSize: const Size(36, 36),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 2. IDENTITY CARD
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _buildIdentityCard(context, user, colors, isDark),
+                ),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+              // 3. STATS GRID (Bento Style - Replaced "В работе" with Dummy)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                sliver: SliverToBoxAdapter(
+                  child: _buildStatsGrid(context, colors),
+                ),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+              // 4. SETTINGS LIST
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _buildSectionHeader('ПРИЛОЖЕНИЕ', colors),
+                    _buildSettingsGroup(
+                      context,
+                      colors,
+                      children: [
+                        _buildToggleRow(
+                          'Уведомления',
+                          Icons.notifications_outlined,
+                          ref.watch(notificationsProvider),
+                          (v) =>
+                              ref.read(notificationsProvider.notifier).toggle(),
+                          colors,
+                        ),
+                        _buildDivider(colors),
+                        _buildToggleRow(
+                          'Вибрация',
+                          Icons.vibration_outlined,
+                          ref.watch(vibrationProvider),
+                          (v) => ref.read(vibrationProvider.notifier).set(v),
+                          colors,
+                        ),
+                        _buildDivider(colors),
+                        _buildToggleRow(
+                          'Темная тема',
+                          Icons.dark_mode_outlined,
+                          ref.watch(themeModeProvider) == ThemeMode.dark,
+                          (v) => ref.read(themeModeProvider.notifier).state = v
+                              ? ThemeMode.dark
+                              : ThemeMode.light,
+                          colors,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+                    _buildSectionHeader('АККАУНТ', colors),
+                    _buildSettingsGroup(
+                      context,
+                      colors,
+                      children: [
+                        _buildNavRow(
+                          'Email',
+                          user.email,
+                          Icons.mail_outline_rounded,
+                          colors,
+                          () => _showEditSheet(
+                            context,
+                            'Новый Email',
+                            user.email,
+                            (v) async {
+                              if (v.isNotEmpty) {
+                                await FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(user.uid)
+                                    .update({'email': v});
+                                if (!mounted) return;
+                                ref.invalidate(userRoleProvider);
+                                _showSovereignNotification(
+                                  'Email успешно обновлен',
+                                  Icons.check_circle_rounded,
+                                  colors.success,
+                                  colors,
+                                );
+                              }
+                            },
+                            isEmail: true,
+                          ),
+                        ),
+                        _buildDivider(colors),
+                        _buildNavRow(
+                          'Пароль',
+                          'Изменить',
+                          Icons.lock_outline_rounded,
+                          colors,
+                          () => _showPasswordResetSheet(
+                            context,
+                            user.email,
+                            colors,
+                          ),
+                        ),
+                        _buildDivider(colors),
+                        _buildNavRow(
+                          'Данные',
+                          'Очистить кэш',
+                          Icons.cleaning_services_outlined,
+                          colors,
+                          () {
+                            PaintingBinding.instance.imageCache.clear();
+                            PaintingBinding.instance.imageCache
+                                .clearLiveImages();
+                            _showSovereignNotification(
+                              'Локальный кэш очищен',
+                              Icons.cleaning_services_rounded,
+                              colors.accentAction,
+                              colors,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ]),
+                ),
+              ),
+
+              // 5. VERSION AT BOTTOM
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 32, bottom: 24),
+                    child: Text(
+                      "Версия $_appVersion",
+                      style: GoogleFonts.inter(
+                        color: colors.contentTertiary,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+        loading: () => Center(
+          child: CircularProgressIndicator(color: colors.accentAction),
+        ),
+        error: (e, _) => Center(
+          child: Text("Ошибка загрузки", style: TextStyle(color: colors.error)),
+        ),
+      ),
+    );
+  }
+
+  // ───────────────── WIDGETS ─────────────────
+
+  Widget _buildIdentityCard(
+    BuildContext context,
+    AppUser user,
+    SkladColors colors,
+    bool isDark,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceHigh,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.divider),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: () => _updateProfilePicture(context, user.uid),
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            colors.accentAction,
+                            colors.accentAction.withValues(alpha: 0.6),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: colors.surfaceHigh,
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(3),
+                        child: CircleAvatar(
+                          radius: 28,
+                          backgroundColor: colors.surfaceContainer,
+                          backgroundImage: user.photoUrl != null
+                              ? NetworkImage(user.photoUrl!)
+                              : null,
+                          child: _isUploading
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colors.accentAction,
+                                  ),
+                                )
+                              : (user.photoUrl == null
+                                    ? Icon(
+                                        Icons.person_outline_rounded,
+                                        size: 24,
+                                        color: colors.neutralGray,
+                                      )
+                                    : null),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: colors.accentAction,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: colors.surfaceHigh,
+                            width: 2,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt_rounded,
+                          size: 10,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user.name.isEmpty ? 'Пользователь' : user.name,
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: colors.contentPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      user.email,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: colors.contentSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () => _showEditSheet(
+                        context,
+                        'Ваше имя',
+                        user.name,
+                        (val) async {
+                          if (val.isNotEmpty) {
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .update({'name': val});
+                            if (!mounted) return;
+                            ref.invalidate(userRoleProvider);
+                            _showSovereignNotification(
+                              'Имя обновлено',
+                              Icons.person_rounded,
+                              colors.accentAction,
+                              colors,
+                            );
+                          }
+                        },
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.surfaceContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Редактировать',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: colors.contentPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatsGrid(BuildContext context, SkladColors colors) {
+    // Use the updated provider name
+    final created = ref.watch(userCreatedTasksProvider).asData?.value ?? 0;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _buildBigStatCard(
+              'Статус',
+              'Активен',
+              Icons.verified_user_rounded,
+              colors.success,
+              colors,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildBigStatCard(
+              'Создано',
+              '$created',
+              Icons.assignment_add,
+              colors.accentAction,
+              colors,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBigStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color accent,
+    SkladColors colors,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surfaceHigh,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.divider),
+        boxShadow: [
+          if (Theme.of(context).brightness == Brightness.light)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: accent, size: 20),
+          ),
+          const SizedBox(height: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: GoogleFonts.inter(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: colors.contentPrimary,
+                ),
+              ),
+              Text(
+                title,
+                style: GoogleFonts.inter(
+                  color: colors.contentSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsGroup(
+    BuildContext context,
+    SkladColors colors, {
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceHigh,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.divider),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: children),
+    );
+  }
+
+  Widget _buildToggleRow(
+    String title,
+    IconData icon,
+    bool value,
+    ValueChanged<bool> onChanged,
+    SkladColors colors,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: colors.contentSecondary, size: 18),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              title,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: colors.contentPrimary,
+              ),
+            ),
+          ),
+          Transform.scale(
+            scale: 0.8,
+            child: Switch.adaptive(
+              value: value,
+              onChanged: (v) {
+                HapticFeedback.lightImpact();
+                onChanged(v);
+              },
+              activeThumbColor: colors.accentAction,
+              inactiveTrackColor: colors.surfaceContainer,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavRow(
+    String title,
+    String? subtitle,
+    IconData icon,
+    SkladColors colors,
+    VoidCallback onTap,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: colors.contentSecondary, size: 18),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: colors.contentPrimary,
+                      ),
+                    ),
+                    if (subtitle != null && subtitle.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          subtitle,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: colors.contentSecondary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colors.contentTertiary,
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, SkladColors colors) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, bottom: 8),
+      child: Text(
+        title.toUpperCase(),
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: colors.contentTertiary,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider(SkladColors colors) {
+    return Divider(height: 1, thickness: 1, indent: 56, color: colors.divider);
+  }
+
+  // ───────────────── BETTER SHEETS ─────────────────
+
+  void _showEditSheet(
+    BuildContext context,
+    String title,
+    String current,
+    Function(String) onSave, {
+    bool isEmail = false,
+  }) {
+    final controller = TextEditingController(text: current);
+    final theme = Theme.of(context);
+    final colors = theme.extension<SkladColors>()!;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: colors.surfaceHigh,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          left: 24,
+          right: 24,
+          top: 12,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: colors.contentTertiary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+
+            Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colors.accentAction.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.edit_note_rounded,
+                    color: colors.accentAction,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: colors.contentPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Обновите информацию ниже",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: colors.contentSecondary,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 32),
+
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                color: colors.contentPrimary,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+              keyboardType: isEmail
+                  ? TextInputType.emailAddress
+                  : TextInputType.text,
+              cursorColor: colors.accentAction,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: colors.surfaceContainer,
+                hintText: "Введите значение",
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: colors.accentAction, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // SIDE BY SIDE BUTTONS with Outlined Cancel
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 Expanded(
-                  child: DialogUtils.buildDialogAction(
-                    context: context,
-                    text: 'Отмена',
-                    onTap: () => Navigator.pop(context),
-                    isPrimary: false,
-                    colors: colors,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      foregroundColor: colors.contentSecondary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(
+                          color: colors.divider,
+                          width: 1,
+                        ), // Thin outline
+                      ),
+                    ),
+                    child: Text(
+                      'Отмена',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: DialogUtils.buildDialogAction(
-                    context: context,
-                    text: 'Отправить',
-                    onTap: () async {
-                      final newName = controller.text.trim();
-                      if (newName.isNotEmpty && newName != currentName) {
-                        final uid = FirebaseAuth.instance.currentUser?.uid;
-                        if (uid != null) {
-                          await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(uid)
-                              .update({'name': newName});
-
-                          ref.invalidate(userRoleProvider);
-
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Имя сохранено')),
-                            );
-                          }
-                        }
-                      }
-
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                      }
+                  child: ElevatedButton(
+                    onPressed: () {
+                      onSave(controller.text.trim());
+                      Navigator.pop(ctx);
                     },
-                    isPrimary: true,
-                    colors: colors,
-                    color: proColors.accentAction,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      elevation: 0,
+                      backgroundColor: colors.accentAction,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(
+                      'Сохранить',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
               ],
@@ -350,575 +931,209 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final userAsync = ref.watch(userRoleProvider);
-    final proColors = Theme.of(context).extension<SkladColors>()!;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colors = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Scaffold(
-      backgroundColor: proColors.surfaceLow,
-      body: SafeArea(
-        child: userAsync.when(
-          data: (user) {
-            if (user == null) {
-              return const Center(child: Text('Пользователь не найден'));
-            }
-
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              key: const PageStorageKey('settings_scroll_key'),
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              children: [
-                _buildProfileHeader(context, user, isDark, colors.primary),
-                const SizedBox(height: 24),
-
-                // 1. Управление складом
-                _buildSettingsGroup(
-                  context,
-                  'Управление складом',
-                  proColors.surfaceHigh,
-                  [
-                    // surfaceHigh
-                    _buildTile(
-                      Icons.cleaning_services_outlined,
-                      'Кэш изображений',
-                      'Очистить временные данные',
-                      proColors.accentAction,
-                      isDark: isDark,
-                      showChevron: true,
-                      onTap: () {
-                        PaintingBinding.instance.imageCache.clear();
-                        PaintingBinding.instance.imageCache.clearLiveImages();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Кэш изображений очищен',
-                              style: textTheme.bodySmall,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildTile(
-                      Icons.vibration,
-                      'Отклик сканера',
-                      'Вибрация при чтении',
-                      proColors.accentAction,
-                      isDark: isDark,
-                      trailing: Switch(
-                        activeThumbColor: proColors.accentAction,
-                        activeTrackColor: proColors.accentAction.withValues(
-                          alpha: 0.4,
-                        ),
-                        value: true,
-                        onChanged: (v) {},
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // 2. Аккаунт
-                _buildSettingsGroup(context, 'Аккаунт', proColors.surfaceHigh, [
-                  _buildTile(
-                    Icons.email_outlined,
-                    'Почта',
-                    user.email,
-                    proColors.accentAction,
-                    isDark: isDark,
-                    showChevron: true, // ✅ Shows the '>' symbol
-                    onTap: () => _updateEmail(context, user.email, isDark),
-                  ),
-                  _buildTile(
-                    Icons.lock_reset_outlined,
-                    'Сброс пароля',
-                    'Отправить ссылку',
-                    proColors.accentAction,
-                    isDark: isDark,
-                    showChevron: true, // ✅ Shows the '>' symbol
-                    onTap: () =>
-                        _showPasswordResetConfirmation(context, user.email),
-                  ),
-                  _buildTile(
-                    Icons.telegram,
-                    'Telegram ID',
-                    user.telegramId ?? 'Не привязан',
-                    const Color(0xFF24A1DE),
-                    isDark: isDark,
-                    showChevron: true,
-                  ),
-                ]),
-
-                const SizedBox(height: 16),
-
-                // 3. Интерфейс
-                _buildSettingsGroup(
-                  context,
-                  'Интерфейс',
-                  proColors.surfaceHigh,
-                  [
-                    _buildTile(
-                      Icons.dark_mode_outlined,
-                      'Темная тема',
-                      'Переключить режим',
-                      proColors.accentAction,
-                      isDark: isDark,
-                      trailing: Switch(
-                        activeThumbColor: proColors.accentAction,
-                        activeTrackColor: proColors.accentAction.withValues(
-                          alpha: 0.4,
-                        ),
-                        value: ref.watch(themeModeProvider) == ThemeMode.dark,
-                        onChanged: (val) {
-                          ref.read(themeModeProvider.notifier).state = val
-                              ? ThemeMode.dark
-                              : ThemeMode.light;
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // 4. Система
-                _buildSettingsGroup(context, 'Система', proColors.surfaceHigh, [
-                  _buildTile(
-                    Icons.logout,
-                    'Выйти из системы',
-                    'Завершить сессию',
-                    Colors.redAccent,
-                    isDark: isDark,
-                    onTap: () => FirebaseAuth.instance.signOut(),
-                    showChevron: true,
-                  ),
-                ]),
-              ],
-            );
-          },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Ошибка: $e')),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfileHeader(
+  void _showPasswordResetSheet(
     BuildContext context,
-    AppUser user,
-    bool isDark,
-    Color primary,
+    String email,
+    SkladColors colors,
   ) {
-    final proColors = Theme.of(context).extension<SkladColors>()!;
-    final colors = Theme.of(context).colorScheme;
-    final cardColor = proColors.surfaceHigh;
-    final displayName = user.name.isNotEmpty ? user.name : "Пользователь";
-    final dividerColor = proColors.neutralGray.withValues(alpha: 0.1);
-
-    // 1. Providers
-    final taskCountAsync = ref.watch(taskCountProvider);
-    final scansAsync = ref.watch(userScansProvider);
-    final rankAsync = ref.watch(activityRankProvider);
-
-    // 2. Resolve Values
-
-    final taskCountString = taskCountAsync.when(
-      data: (val) => val.toString(),
-      loading: () => '...',
-      error: (err, _) => '0',
-    );
-
-    final scansString = scansAsync.when(
-      data: (val) => val.toString(),
-      loading: () => '...',
-      error: (err, _) => '0',
-    );
-
-    final rankString = rankAsync.value ?? '-';
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: dividerColor),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: proColors.neutralGray.withValues(alpha: 0.02),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Column(
-        children: [
-          const SizedBox(height: 24),
-          // --- PROFILE IMAGE SECTION ---
-          Stack(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.2)
-                        : Colors.black.withValues(alpha: 0.1),
-                    width: 2,
-                  ),
-                ),
-                child: CircleAvatar(
-                  key: ValueKey(user.photoUrl),
-                  radius: 40,
-                  backgroundImage:
-                      user.photoUrl != null && user.photoUrl!.isNotEmpty
-                      ? NetworkImage(
-                          "${user.photoUrl!}?v=${DateTime.now().millisecondsSinceEpoch}",
-                        )
-                      : null,
-                  child: _isUploading
-                      ? const CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        )
-                      : (user.photoUrl == null || user.photoUrl!.isEmpty
-                            ? const Icon(
-                                Icons.person,
-                                size: 40,
-                                color: Colors.white,
-                              )
-                            : null),
-                ),
-              ),
-              Positioned(
-                bottom: 4,
-                right: 4,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {
-                      final uid = FirebaseAuth.instance.currentUser?.uid;
-                      if (uid != null) _updateProfilePicture(context, uid);
-                    },
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: cardColor,
-                        shape: BoxShape.circle,
-                      ),
-                      child: CircleAvatar(
-                        radius: 12,
-                        backgroundColor: proColors.accentAction,
-                        child: const Icon(
-                          Icons.camera_alt,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const SizedBox(width: 32),
-              Text(
-                displayName,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: colors.onSurface,
-                ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () => _updateProfileName(context, user.name, isDark),
-                child: Icon(
-                  Icons.edit,
-                  size: 18,
-                  color: proColors.accentAction,
-                ),
-              ),
-            ],
-          ),
-          Text(
-            user.email,
-            style: TextStyle(color: proColors.neutralGray, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: proColors.accentAction.withValues(
-                alpha: isDark ? 0.15 : 0.08,
-              ),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: proColors.accentAction.withValues(
-                  alpha: isDark ? 0.4 : 0.2,
-                ),
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: colors.surfaceHigh,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: colors.contentTertiary.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            child: Text(
-              'КЛАДОВЩИК',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-                color: proColors.accentAction,
-                letterSpacing: 1.5,
+
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colors.warning.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.lock_reset_rounded,
+                size: 32,
+                color: colors.warning,
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Divider(height: 1, color: dividerColor),
 
-          // --- STATS BAR ---
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16.0),
-            child: IntrinsicHeight(
-              child: Row(
+            const SizedBox(height: 16),
+            Text(
+              "Сброс пароля",
+              style: GoogleFonts.inter(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: colors.contentPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            RichText(
+              textAlign: TextAlign.center,
+              text: TextSpan(
+                style: GoogleFonts.inter(
+                  color: colors.contentSecondary,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
                 children: [
-                  Expanded(
-                    child: _buildStatItem(
-                      'Сканы',
-                      scansString, // Connected!
-                      proColors.accentAction,
-                      isDark,
-                    ),
+                  const TextSpan(
+                    text: "Мы отправим ссылку для сброса пароля на:\n",
                   ),
-                  VerticalDivider(width: 1, thickness: 1, color: dividerColor),
-                  Expanded(
-                    child: _buildStatItem(
-                      'Задачи',
-                      taskCountString, // Connected!
-                      proColors.accentAction,
-                      isDark,
-                    ),
-                  ),
-                  VerticalDivider(width: 1, thickness: 1, color: dividerColor),
-                  Expanded(
-                    child: _buildStatItem(
-                      'Активность',
-                      rankString, // Connected!
-                      proColors.accentAction,
-                      isDark,
+                  TextSpan(
+                    text: email,
+                    style: TextStyle(
+                      color: colors.contentPrimary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildStatItem(String label, String value, Color color, bool isDark) {
-    final proColors = Theme.of(context).extension<SkladColors>()!;
-    final colors = Theme.of(context).colorScheme;
+            const SizedBox(height: 32),
 
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-            color: colors.primary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: proColors.neutralGray,
-          ),
-        ),
-      ],
-    );
-  }
+            // SIDE BY SIDE BUTTONS with Outlined Cancel
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      foregroundColor: colors.contentSecondary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(
+                          color: colors.divider,
+                          width: 1,
+                        ), // Thin outline
+                      ),
+                    ),
+                    child: Text(
+                      'Отмена',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      try {
+                        await FirebaseAuth.instance.sendPasswordResetEmail(
+                          email: email,
+                        );
 
-  Widget _buildSettingsGroup(
-    BuildContext context,
-    String title,
-    Color cardColor,
-    List<Widget> children,
-  ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final proColors = Theme.of(context).extension<SkladColors>()!;
+                        // Check if the bottom sheet context is still valid
+                        if (!ctx.mounted) return;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 28, bottom: 8),
-          child: Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-              color: isDark ? proColors.neutralGray : Colors.blueGrey[800],
-              letterSpacing: 1.5,
+                        // Use the specific context (ctx) to pop the sheet
+                        Navigator.pop(ctx);
+
+                        _showSovereignNotification(
+                          'Письмо со сбросом пароля отправлено',
+                          Icons.mail_outline_rounded,
+                          colors.accentAction,
+                          colors,
+                        );
+                      } catch (_) {
+                        // Check ctx.mounted here as well
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      elevation: 0,
+                      backgroundColor: colors.accentAction,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(
+                      'Отправить',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ),
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: proColors.neutralGray.withValues(alpha: 0.05),
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Column(
-              children:
-                  children, // updated to not have hardcoded dividers; add if needed
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTile(
-    IconData icon,
-    String title,
-    String subtitle,
-    Color color, {
-    Widget? trailing,
-    VoidCallback? onTap, // Ensure this exists
-    bool showChevron = false,
-    required bool isDark,
-  }) {
-    final colors = Theme.of(context).colorScheme;
-    final proColors = Theme.of(context).extension<SkladColors>()!;
-    return ListTile(
-      onTap: onTap, // ✅ Make sure this is assigned here
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: isDark ? 0.15 : 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-          color: colors.onSurface,
+          ],
         ),
       ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(fontSize: 11, color: proColors.neutralGray),
-      ),
-      trailing:
-          trailing ??
-          (showChevron
-              ? const Icon(Icons.chevron_right, size: 20, color: Colors.grey)
-              : null),
     );
   }
 
   Future<void> _updateProfilePicture(BuildContext context, String uid) async {
-    final theme = Theme.of(context);
-    final proColors = theme.extension<SkladColors>()!;
-
     final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
+    final colors = Theme.of(context).extension<SkladColors>()!;
+
+    final image = await picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 800,
-      maxHeight: 800,
       imageQuality: 85,
     );
-
     if (image == null) return;
 
-    // 1. CROP (Safe for web via helper)
-    final String? processedPath = await cropImageIfPossible(image);
-    if (processedPath == null) return;
+    final processed = await cropImageIfPossible(image);
+    if (processed == null) return;
 
+    if (!mounted) return;
     setState(() => _isUploading = true);
 
     try {
-      const String cloudName = "dukgkpmqw";
-      const String uploadPreset = "sklad_helper_preset";
-
-      // FIX: Use the helper function.
-      // This is the ONLY way to hide 'MultipartFile.fromFile' from the Web compiler.
-      final MultipartFile fileToUpload = await prepareUploadFile(
-        processedPath,
-        image,
-      );
-
+      final fileToUpload = await prepareUploadFile(processed, image);
       FormData formData = FormData.fromMap({
         "file": fileToUpload,
-        "upload_preset": uploadPreset,
+        "upload_preset": "sklad_helper_preset",
         "quality": "auto:good",
-        "fetch_format": "auto",
         "resource_type": "image",
       });
 
       var response = await Dio().post(
-        "https://api.cloudinary.com/v1_1/$cloudName/image/upload",
+        "https://api.cloudinary.com/v1_1/dukgkpmqw/image/upload",
         data: formData,
-        onSendProgress: (sent, total) {
-          if (total > 0) {
-            debugPrint(
-              'Upload progress: ${(sent / total * 100).toStringAsFixed(1)}%',
-            );
-          }
-        },
       );
+
+      if (!mounted) return;
 
       if (response.statusCode == 200 && response.data['secure_url'] != null) {
-        final String secureUrl = response.data['secure_url'];
-
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          'photoUrl': secureUrl,
+          'photoUrl': response.data['secure_url'],
         });
-
         PaintingBinding.instance.imageCache.clear();
-        PaintingBinding.instance.imageCache.clearLiveImages();
-
-        if (!context.mounted) return;
         ref.invalidate(userRoleProvider);
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Фото сохранено')));
-      } else {
-        throw Exception(
-          'Cloudinary error: ${response.statusCode} - ${response.data}',
+        _showSovereignNotification(
+          'Фото профиля обновлено',
+          Icons.camera_alt_rounded,
+          colors.accentAction,
+          colors,
         );
       }
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка загрузки: $e'),
-          backgroundColor: proColors.error,
-        ),
-      );
-      debugPrint('PFP Error: $e');
+    } catch (_) {
+      if (mounted) {
+        _showSovereignNotification(
+          'Ошибка загрузки фото',
+          Icons.error_outline_rounded,
+          colors.error,
+          colors,
+        );
+      }
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }

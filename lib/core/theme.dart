@@ -1,62 +1,115 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-/// Professional Color Palette Extension with more shades for flexibility
+// -----------------------------------------------------------------------------
+// 1. PALETTE DEFINITION (Private)
+// Professional "Slate & Indigo" System
+// -----------------------------------------------------------------------------
+abstract class _Palette {
+  // Brand Colors (Indigo)
+  static const Color indigo500 = Color(0xFF6366F1);
+  static const Color indigo600 = Color(0xFF4F46E5);
+
+  // Status Colors (Emerald, Amber, Rose)
+  static const Color emerald500 = Color(0xFF10B981);
+  static const Color emerald600 = Color(0xFF059669);
+
+  static const Color amber500 = Color(0xFFF59E0B);
+  static const Color amber600 = Color(0xFFD97706);
+
+  static const Color rose500 = Color(0xFFEF4444);
+  static const Color rose600 = Color(0xFFDC2626);
+
+  // Neutral Slate (Light)
+  static const Color slate50 = Color(0xFFF8FAFC); // Background
+  static const Color slate100 = Color(0xFFF1F5F9); // Surface Container
+  static const Color slate200 = Color(0xFFE2E8F0); // Dividers
+
+  // Neutral Slate (Dark/Text)
+  static const Color slate300 = Color(0xFFCBD5E1); // Secondary Text (Dark)
+  static const Color slate400 = Color(0xFF94A3B8); // Tertiary Text
+  static const Color slate500 = Color(0xFF64748B); // Neutral Icons
+  static const Color slate600 = Color(0xFF475569); // Secondary Text (Light)
+
+  // Slate 700 removed (unused)
+
+  static const Color slate800 = Color(0xFF1E293B); // Surface (Dark Mode)
+  static const Color slate900 = Color(
+    0xFF0F172A,
+  ); // Card (Dark Mode) / Text (Light)
+  static const Color slate950 = Color(0xFF020617); // Background (Dark Mode)
+
+  static const Color white = Color(0xFFFFFFFF);
+}
+
+// -----------------------------------------------------------------------------
+// 2. THEME EXTENSION (Public)
+// Compatible with existing code usage (colors.surfaceLow, etc.)
+// -----------------------------------------------------------------------------
+@immutable
 class SkladColors extends ThemeExtension<SkladColors> {
-  final Color accentAction; // Main interactive color (buttons, links)
-  final Color accentSecondary; // Subtle variant for highlights
-  final Color surfaceHigh; // Elevated surfaces (cards, dialogs)
-  final Color surfaceLow; // Backgrounds (scaffold, sheets)
-  final Color neutralGray; // Subtle text, dividers, icons
-  final Color onAccent; // Text on accent color
-  final Color success; // Positive feedback
-  final Color warning; // Caution feedback
+  // Backgrounds
+  final Color surfaceLow; // Main Scaffold background
+  final Color surfaceHigh; // Cards, Sheets, Modals
+  final Color surfaceContainer; // Grouped settings, secondary areas
+
+  // Text / Content
+  final Color contentPrimary; // Headings, main inputs
+  final Color contentSecondary; // Subtitles, descriptions
+  final Color contentTertiary; // Timestamps, hints
+  final Color neutralGray; // Icons, neutral elements
+
+  // Actions & Borders
+  final Color accentAction; // Buttons, active states
+  final Color divider; // Borders, separators
+
+  // Semantic
+  final Color success;
+  final Color warning;
   final Color error;
 
-  // --- ADDED MISSING COLORS ---
-  final Color contentPrimary; // Main text color (Titles, strong text)
-  final Color contentSecondary; // Secondary text color (Subtitles, hints)
-
-  SkladColors({
-    required this.accentAction,
-    required this.accentSecondary,
-    required this.surfaceHigh,
+  const SkladColors({
     required this.surfaceLow,
+    required this.surfaceHigh,
+    required this.surfaceContainer,
+    required this.contentPrimary,
+    required this.contentSecondary,
+    required this.contentTertiary,
     required this.neutralGray,
-    required this.onAccent,
+    required this.accentAction,
+    required this.divider,
     required this.success,
     required this.warning,
     required this.error,
-    required this.contentPrimary,
-    required this.contentSecondary,
   });
 
   @override
   SkladColors copyWith({
-    Color? accentAction,
-    Color? accentSecondary,
-    Color? surfaceHigh,
     Color? surfaceLow,
+    Color? surfaceHigh,
+    Color? surfaceContainer,
+    Color? contentPrimary,
+    Color? contentSecondary,
+    Color? contentTertiary,
     Color? neutralGray,
-    Color? onAccent,
+    Color? accentAction,
+    Color? divider,
     Color? success,
     Color? warning,
     Color? error,
-    Color? contentPrimary,
-    Color? contentSecondary,
   }) {
     return SkladColors(
-      accentAction: accentAction ?? this.accentAction,
-      accentSecondary: accentSecondary ?? this.accentSecondary,
-      surfaceHigh: surfaceHigh ?? this.surfaceHigh,
       surfaceLow: surfaceLow ?? this.surfaceLow,
+      surfaceHigh: surfaceHigh ?? this.surfaceHigh,
+      surfaceContainer: surfaceContainer ?? this.surfaceContainer,
+      contentPrimary: contentPrimary ?? this.contentPrimary,
+      contentSecondary: contentSecondary ?? this.contentSecondary,
+      contentTertiary: contentTertiary ?? this.contentTertiary,
       neutralGray: neutralGray ?? this.neutralGray,
-      onAccent: onAccent ?? this.onAccent,
+      accentAction: accentAction ?? this.accentAction,
+      divider: divider ?? this.divider,
       success: success ?? this.success,
       warning: warning ?? this.warning,
       error: error ?? this.error,
-      contentPrimary: contentPrimary ?? this.contentPrimary,
-      contentSecondary: contentSecondary ?? this.contentSecondary,
     );
   }
 
@@ -64,224 +117,130 @@ class SkladColors extends ThemeExtension<SkladColors> {
   SkladColors lerp(ThemeExtension<SkladColors>? other, double t) {
     if (other is! SkladColors) return this;
     return SkladColors(
-      accentAction: Color.lerp(accentAction, other.accentAction, t)!,
-      accentSecondary: Color.lerp(accentSecondary, other.accentSecondary, t)!,
-      surfaceHigh: Color.lerp(surfaceHigh, other.surfaceHigh, t)!,
       surfaceLow: Color.lerp(surfaceLow, other.surfaceLow, t)!,
-      neutralGray: Color.lerp(neutralGray, other.neutralGray, t)!,
-      onAccent: Color.lerp(onAccent, other.onAccent, t)!,
-      success: Color.lerp(success, other.success, t)!,
-      warning: Color.lerp(warning, other.warning, t)!,
-      error: Color.lerp(error, other.error, t)!,
+      surfaceHigh: Color.lerp(surfaceHigh, other.surfaceHigh, t)!,
+      surfaceContainer: Color.lerp(
+        surfaceContainer,
+        other.surfaceContainer,
+        t,
+      )!,
       contentPrimary: Color.lerp(contentPrimary, other.contentPrimary, t)!,
       contentSecondary: Color.lerp(
         contentSecondary,
         other.contentSecondary,
         t,
       )!,
+      contentTertiary: Color.lerp(contentTertiary, other.contentTertiary, t)!,
+      neutralGray: Color.lerp(neutralGray, other.neutralGray, t)!,
+      accentAction: Color.lerp(accentAction, other.accentAction, t)!,
+      divider: Color.lerp(divider, other.divider, t)!,
+      success: Color.lerp(success, other.success, t)!,
+      warning: Color.lerp(warning, other.warning, t)!,
+      error: Color.lerp(error, other.error, t)!,
     );
   }
 }
 
-/// Global theme constants
-const proIndigo = Color(0xFF6366F1);
-
+// -----------------------------------------------------------------------------
+// 3. THEME FACTORY (Public)
+// -----------------------------------------------------------------------------
 class SkladTheme {
-  // Dark Theme
-  static ThemeData get darkTheme {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF0B0F1A),
-      primaryColor: proIndigo,
-      extensions: <ThemeExtension<dynamic>>[
-        SkladColors(
-          accentAction: proIndigo,
-          accentSecondary: proIndigo.withValues(alpha: 0.6),
-          surfaceHigh: const Color(0xFF1F2937),
-          surfaceLow: const Color(0xFF111827),
-          neutralGray: const Color(0xFF6B7280),
-          onAccent: Colors.white,
-          success: const Color(0xFF10B981),
-          warning: const Color(0xFFF59E0B),
-          error: const Color(0xFFEF4444),
-          // --- DEFINED DARK TEXT COLORS ---
-          contentPrimary: Colors.white,
-          contentSecondary: Colors.white.withValues(alpha: 0.7),
-        ),
-      ],
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: proIndigo,
-        brightness: Brightness.dark,
-        surface: const Color(0xFF1F2937),
-        onSurface: Colors.white70,
-        error: const Color(0xFFEF4444),
-      ).copyWith(secondary: const Color(0xFF6B7280)),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF0B0F1A),
-        elevation: 0,
-        centerTitle: true,
-        titleTextStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-      ),
-      buttonTheme: const ButtonThemeData(
-        buttonColor: proIndigo,
-        textTheme: ButtonTextTheme.primary,
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: proIndigo,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: proIndigo,
-          side: BorderSide(color: proIndigo.withValues(alpha: 0.5)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFF6B7280), width: 1.0),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: proIndigo, width: 1.5),
-        ),
-        hintStyle: const TextStyle(color: Colors.white60),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
-      ),
-      dividerTheme: const DividerThemeData(
-        color: Color(0xFF6B7280),
-        thickness: 0.5,
-        space: 16,
-      ),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
-          .copyWith(
-            bodyMedium: const TextStyle(color: Colors.white70),
-            labelMedium: const TextStyle(color: Colors.white60),
-          ),
-      iconTheme: const IconThemeData(color: Colors.white70),
-    );
-  }
-
-  // Light Theme
+  // --- LIGHT MODE ---
   static ThemeData get lightTheme {
+    const colors = SkladColors(
+      surfaceLow: _Palette.slate50,
+      surfaceHigh: _Palette.white,
+      surfaceContainer: _Palette.slate100,
+
+      contentPrimary: _Palette.slate900,
+      contentSecondary: _Palette.slate600,
+      contentTertiary: _Palette.slate400,
+      neutralGray: _Palette.slate500,
+
+      accentAction: _Palette.indigo600,
+      divider: _Palette.slate200,
+
+      success: _Palette.emerald600,
+      warning: _Palette.amber600,
+      error: _Palette.rose600,
+    );
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-      primaryColor: proIndigo,
-      navigationBarTheme: NavigationBarThemeData(
-        height: 70,
-        backgroundColor: const Color(0xFFF3F4F6),
-        indicatorColor: proIndigo.withValues(alpha: 0.15),
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return const TextStyle(
-              color: proIndigo,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            );
-          }
-          return const TextStyle(color: Colors.black54, fontSize: 12);
-        }),
+      scaffoldBackgroundColor: colors.surfaceLow,
+      primaryColor: colors.accentAction,
+      extensions: [colors],
+
+      // Material 3 Mappings
+      colorScheme: ColorScheme.light(
+        primary: colors.accentAction,
+        surface: colors.surfaceHigh,
+        error: colors.error,
+        onSurface: colors.contentPrimary,
+        // Mapping container roles
+        surfaceContainerLowest: _Palette.white,
+        surfaceContainerLow: _Palette.slate50,
+        surfaceContainer: _Palette.slate100,
       ),
-      extensions: <ThemeExtension<dynamic>>[
-        SkladColors(
-          accentAction: proIndigo,
-          accentSecondary: proIndigo.withValues(alpha: 0.6),
-          surfaceHigh: Colors.white,
-          surfaceLow: const Color(0xFFF1F5F9),
-          neutralGray: const Color(0xFF6B7280),
-          onAccent: Colors.black87,
-          success: const Color(0xFF10B981),
-          warning: const Color(0xFFF59E0B),
-          error: const Color(0xFFEF4444),
-          // --- DEFINED LIGHT TEXT COLORS ---
-          contentPrimary: const Color(0xFF0F172A), // Slate 900
-          contentSecondary: const Color(0xFF64748B), // Slate 500
-        ),
-      ],
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: proIndigo,
-        brightness: Brightness.light,
-        surface: Colors.white,
-      ).copyWith(secondary: const Color(0xFF6B7280)),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFFF8FAFC),
+
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.surfaceLow,
+        foregroundColor: colors.contentPrimary,
         elevation: 0,
-        centerTitle: true,
-        titleTextStyle: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 20,
-          color: Colors.black87,
-        ),
+        scrolledUnderElevation: 0,
       ),
-      buttonTheme: const ButtonThemeData(
-        buttonColor: proIndigo,
-        textTheme: ButtonTextTheme.primary,
+
+      // Removed cardTheme to fix "CardThemeData" type error.
+      // Cards will default to 'surface' color defined in colorScheme above.
+    );
+  }
+
+  // --- DARK MODE ---
+  static ThemeData get darkTheme {
+    const colors = SkladColors(
+      surfaceLow: _Palette.slate950,
+      surfaceHigh: _Palette.slate900,
+      surfaceContainer: _Palette.slate800,
+
+      contentPrimary: _Palette.white,
+      contentSecondary: _Palette.slate300,
+      contentTertiary: _Palette.slate500,
+      neutralGray: _Palette.slate400,
+
+      accentAction: _Palette.indigo500, // Slightly lighter for contrast
+      divider: _Palette.slate800,
+
+      success: _Palette.emerald500,
+      warning: _Palette.amber500,
+      error: _Palette.rose500,
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: colors.surfaceLow,
+      primaryColor: colors.accentAction,
+      extensions: [colors],
+
+      // Material 3 Mappings
+      colorScheme: ColorScheme.dark(
+        primary: colors.accentAction,
+        surface: colors.surfaceHigh,
+        error: colors.error,
+        onSurface: colors.contentPrimary,
+
+        surfaceContainerLowest: _Palette.slate950,
+        surfaceContainerLow: _Palette.slate900,
+        surfaceContainer: _Palette.slate800,
       ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: proIndigo,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
+
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.surfaceLow,
+        foregroundColor: colors.contentPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
       ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: proIndigo,
-          side: BorderSide(color: proIndigo.withValues(alpha: 0.5)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFF6B7280), width: 1.0),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: proIndigo, width: 1.5),
-        ),
-        hintStyle: const TextStyle(color: Colors.black54),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
-      ),
-      dividerTheme: const DividerThemeData(
-        color: Color(0xFF6B7280),
-        thickness: 0.5,
-        space: 16,
-      ),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme)
-          .copyWith(
-            bodyMedium: const TextStyle(color: Colors.black54),
-            labelMedium: const TextStyle(color: Colors.black45),
-          ),
-      iconTheme: const IconThemeData(color: Colors.black54),
     );
   }
 }

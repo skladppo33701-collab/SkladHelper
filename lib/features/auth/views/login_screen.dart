@@ -6,10 +6,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
-import 'package:flutter/foundation.dart'; // Required for kIsWeb
-import 'package:google_sign_in_web/google_sign_in_web.dart'
-    as web; // Required for GSIButton types
-import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart'; // Required for GoogleSignInPlatform
+// import 'package:flutter/foundation.dart';
+
+// import 'package:google_sign_in_web/google_sign_in_web.dart' as web;
+// import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -72,7 +72,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       _buildHeader(),
                       const SizedBox(height: 40),
 
-                      _buildPillGoogleButton(proColors),
+                      // Use the unified button for now.
+                      // If you strictly need the Google "Pill" renderer on Web,
+                      // it must be done in a separate file that is NOT imported by Android.
+                      _buildMobileButton(proColors),
 
                       const SizedBox(height: 32),
                       _buildDivider(),
@@ -211,35 +214,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ],
       ),
     );
-  }
-
-  Widget _buildPillGoogleButton(SkladColors proColors) {
-    if (kIsWeb) {
-      // FIX: This now correctly watches the global provider from auth_provider.dart
-      final initStatus = ref.watch(googleSignInInitProvider);
-
-      return initStatus.when(
-        data: (_) => Center(
-          child: (GoogleSignInPlatform.instance as web.GoogleSignInPlugin)
-              .renderButton(
-                configuration: web.GSIButtonConfiguration(
-                  shape: web.GSIButtonShape.pill,
-                  theme: web.GSIButtonTheme.outline,
-                ),
-              ),
-        ),
-        loading: () => const Center(
-          child: SizedBox(
-            height: 24,
-            width: 24,
-            child: CircularProgressIndicator(),
-          ),
-        ),
-        error: (err, stack) => Text('Ошибка: $err'),
-      );
-    }
-
-    return _buildMobileButton(proColors);
   }
 
   Widget _buildMobileButton(SkladColors proColors) {

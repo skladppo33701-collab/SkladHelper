@@ -37,71 +37,64 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # ────────────────────────────────────────────────
-  # State Management
+  # Core & State Management
   # ────────────────────────────────────────────────
   flutter_riverpod: ^3.2.0
   riverpod: ^3.2.0
-  # ────────────────────────────────────────────────
-  # Firebase (Core + Auth + Storage + Firestore + Analytics)
-  # ────────────────────────────────────────────────
-  firebase_core: ^4.2.1
-  firebase_auth: ^6.1.2
-  firebase_storage: ^13.0.5
-  cloud_firestore: ^6.1.0
-  firebase_analytics: ^12.0.4
+  path_provider: ^2.1.3
 
   # ────────────────────────────────────────────────
-  # Networking / API
+  # Firebase (Backend)
   # ────────────────────────────────────────────────
-  dio: ^5.9.0
+  firebase_core: ^4.4.0
+  firebase_auth: ^6.1.4
+  cloud_firestore: ^6.1.2
+  firebase_storage: ^13.0.6
+  firebase_analytics: ^12.1.1
 
   # ────────────────────────────────────────────────
-  # Scanning / Camera
-  # ────────────────────────────────────────────────
-  mobile_scanner: ^7.1.4
-
-  # ────────────────────────────────────────────────
-  # Image / Media Picking & Processing
-  # ────────────────────────────────────────────────
-  image_picker: ^1.2.1
-  image_cropper: ^11.0.0
-
-  # ────────────────────────────────────────────────
-  # File / Document Handling
-  # ────────────────────────────────────────────────
-  file_picker: ^10.3.8
-  excel: ^4.0.6
-  path_provider: ^2.1.5
-
-  # ────────────────────────────────────────────────
-  # UI / Formatting / Internationalization
-  # ────────────────────────────────────────────────
-  google_fonts: ^7.0.2
-  intl: ^0.20.2
-  flutter_slidable: ^4.0.3
-
-  # ────────────────────────────────────────────────
-  # Authentication / Sign-in
+  # Authentication (Social Login)
   # ────────────────────────────────────────────────
   google_sign_in: ^7.2.0
-  google_sign_in_web: ^1.1.0
-  google_sign_in_platform_interface: ^3.1.0
 
   # ────────────────────────────────────────────────
-  # Utilities / Platform Integration
+  # UI & Design
   # ────────────────────────────────────────────────
-  url_launcher: ^6.3.2
-  android_intent_plus: ^6.0.0
+  google_fonts: ^8.0.0
+  flutter_svg: ^2.0.10
+  intl: ^0.20.2
+  flutter_slidable: ^4.0.3
   vibration: ^3.1.5
-  random_password_generator: ^0.2.1
-  flutter_svg: ^2.2.3
-  csv: ^6.0.0
-  syncfusion_flutter_pdf: ^32.1.24
-  google_identity_services_web: ^0.3.3+1
-  uuid: ^4.5.2
+
+  # ────────────────────────────────────────────────
+  # Hardware Features (Camera/Scanner)
+  # ────────────────────────────────────────────────
+  mobile_scanner: ^7.1.4
+  image_picker: ^1.1.1
+  image_cropper: ^11.0.0
+  url_launcher: ^6.2.6
+  android_intent_plus: ^6.0.0
+
+  # ────────────────────────────────────────────────
+  # File Processing (Excel/PDF/CSV)
+  # ────────────────────────────────────────────────
+  file_picker: ^10.3.8
   spreadsheet_decoder: ^2.3.0
+  excel: ^4.0.6
+  csv: ^6.0.0
+  pdf: ^3.11.0
+  syncfusion_flutter_pdf: ^32.1.24
+
+  # ────────────────────────────────────────────────
+  # Networking & Utilities
+  # ────────────────────────────────────────────────
+  dio: ^5.4.3
+  uuid: ^4.4.0
+  random_password_generator: ^0.2.1
+  cross_file: ^0.3.4
   desktop_drop: ^0.7.0
-  cross_file: ^0.3.3+8
+  package_info_plus: ^9.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

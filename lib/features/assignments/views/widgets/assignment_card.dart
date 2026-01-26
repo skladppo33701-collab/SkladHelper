@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/assignment_model.dart';
-import '../../providers/assignment_provider.dart';
+import 'package:intl/intl.dart';
+
+import 'package:sklad_helper_33701/core/theme.dart';
+import 'package:sklad_helper_33701/features/assignments/models/assignment_model.dart';
 
 class AssignmentCard extends ConsumerWidget {
-  final WarehouseAssignment assignment;
+  final Assignment assignment;
   final VoidCallback onTap;
 
   const AssignmentCard({
@@ -15,122 +17,137 @@ class AssignmentCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final progress = assignment.progress;
-    final isDone = progress >= 1.0;
+    final colors = Theme.of(context).extension<SkladColors>()!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Swipe-to-Action logic
-    return Dismissible(
-      key: ValueKey(assignment.id),
-      direction: DismissDirection.startToEnd, // Left to right
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        color: Colors.green,
-        child: const Row(
-          children: [
-            Icon(Icons.archive_outlined, color: Colors.white),
-            SizedBox(width: 8),
-            Text(
-              "В архив",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+    final totalReq = assignment.items.fold(
+      0.0,
+      (sum, item) => sum + item.requiredQty,
+    );
+    final totalScanned = assignment.items.fold(
+      0.0,
+      (sum, item) => sum + item.scannedQty,
+    );
+    final progress = totalReq > 0
+        ? (totalScanned / totalReq).clamp(0.0, 1.0)
+        : 0.0;
+    final isDone = assignment.status == AssignmentStatus.completed;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: colors.surfaceHigh,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ],
+        ],
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.transparent,
         ),
       ),
-      confirmDismiss: (direction) async {
-        // Confirmation dialog
-        if (!isDone) return false; // Only allow archiving if done? (Optional)
-        return true;
-      },
-      onDismissed: (_) {
-        ref.read(assignmentProvider.notifier).archiveAssignment(assignment.id);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Задание перемещено в архив")),
-        );
-      },
-      child: Card(
-        elevation: 0,
-        color: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
-        ),
-        margin: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            assignment.type.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[600],
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            assignment.number,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDone
+                            ? colors.success.withValues(alpha: 0.1)
+                            : colors.accentAction.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        assignment.type.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: isDone ? colors.success : colors.accentAction,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
-                    if (isDone)
-                      const Icon(Icons.check_circle, color: Colors.green)
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: colors.neutralGray,
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue[50],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          "${(progress * 100).toInt()}%",
+                        const SizedBox(width: 4),
+                        Text(
+                          DateFormat(
+                            'dd MMM, HH:mm',
+                          ).format(assignment.createdAt),
                           style: TextStyle(
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.bold,
                             fontSize: 12,
+                            color: colors.neutralGray,
                           ),
                         ),
-                      ),
+                      ],
+                    ),
                   ],
                 ),
+
                 const SizedBox(height: 12),
-                // Footer
+
+                Text(
+                  assignment.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
                 Row(
                   children: [
-                    Icon(
-                      Icons.calendar_today_outlined,
-                      size: 14,
-                      color: Colors.grey[500],
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 6,
+                          backgroundColor: isDark
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : const Color(0xFFF1F5F9),
+                          valueColor: AlwaysStoppedAnimation(
+                            isDone ? colors.success : colors.accentAction,
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 12),
                     Text(
-                      assignment.date,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      "${(progress * 100).toInt()}%",
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isDone ? colors.success : colors.accentAction,
+                      ),
                     ),
                   ],
                 ),

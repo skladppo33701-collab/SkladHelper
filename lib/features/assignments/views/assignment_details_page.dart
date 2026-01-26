@@ -1,438 +1,708 @@
-// ──────────────────────────────────────────────────────────────
-//  InventoryPage – Drag & Drop enriched version
-// ──────────────────────────────────────────────────────────────
-
-import 'dart:typed_data';
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cross_file/cross_file.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
+
 import 'package:sklad_helper_33701/core/theme.dart';
+import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
 import 'package:sklad_helper_33701/features/assignments/models/assignment_model.dart';
 import 'package:sklad_helper_33701/features/assignments/providers/assignment_provider.dart';
-import 'package:sklad_helper_33701/features/assignments/views/assignment_details_page.dart';
-import 'package:uuid/uuid.dart';
+import 'package:sklad_helper_33701/features/inventory/presentation/scanner_page.dart';
 
-class InventoryPage extends ConsumerStatefulWidget {
-  const InventoryPage({super.key});
+class AssignmentDetailsPage extends ConsumerWidget {
+  final String assignmentId;
 
-  @override
-  ConsumerState<InventoryPage> createState() => _InventoryPageState();
-}
-
-class _InventoryPageState extends ConsumerState<InventoryPage>
-    with SingleTickerProviderStateMixin {
-  final TextEditingController _searchController = TextEditingController();
-
-  bool _isDragging = false;
-  bool _isProcessingDrop = false;
-
-  late AnimationController _pulseCtrl;
-  late Animation<double> _pulseAnim;
+  const AssignmentDetailsPage({super.key, required this.assignmentId});
 
   @override
-  void initState() {
-    super.initState();
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..repeat(reverse: true);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).extension<SkladColors>()!;
 
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.10).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOutCubic),
+    // Получаем конкретное задание из состояния
+    final assignment = ref
+        .watch(assignmentsProvider)
+        .firstWhere(
+          (a) => a.id == assignmentId,
+          orElse: () => Assignment(
+            id: '',
+            name: 'Не найдено',
+            type: '',
+            createdAt: DateTime.now(),
+            items: [],
+          ),
+        );
+
+    final userAsync = ref.watch(userRoleProvider);
+    final creatorPfp = userAsync.asData?.value?.photoUrl;
+
+    if (assignment.id.isEmpty) {
+      return Scaffold(
+        backgroundColor: colors.surfaceLow,
+        appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+        body: const Center(child: Text('Задание не найдено')),
+      );
+    }
+
+    final totalItems = assignment.items.length;
+    final scannedItems = assignment.items
+        .where((i) => i.scannedQty >= i.requiredQty)
+        .length;
+    final progress = totalItems > 0 ? scannedItems / totalItems : 0.0;
+
+    return Scaffold(
+      backgroundColor: colors.surfaceLow,
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          // 1. SOFT-TONE EXECUTIVE APP BAR
+          SliverAppBar(
+            expandedHeight: 180,
+            pinned: true,
+            stretch: true,
+            backgroundColor: colors.surfaceLow,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: colors.contentPrimary,
+                size: 18,
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+            actions: [
+              // Кнопка меню "Три точки"
+              PopupMenuButton<String>(
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  color: colors.contentPrimary,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                color: colors.surfaceHigh,
+                offset: const Offset(0, 40),
+                onSelected: (value) {
+                  if (value == 'complete') {
+                    ref
+                        .read(assignmentsProvider.notifier)
+                        .completeAssignment(assignment.id);
+                  } else if (value == 'info') {
+                    _showInfoSheet(context, assignment, colors);
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'complete',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline_rounded,
+                          color: colors.success,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        const Text('Завершить'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'info',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          color: colors.accentAction,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        const Text('Информация'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              centerTitle: false,
+              titlePadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 16,
+              ),
+              background: Container(
+                padding: const EdgeInsets.fromLTRB(24, 60, 24, 20),
+                color:
+                    colors.surfaceContainer, // Мягкий фон, соответствующий теме
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildStatusBadge(assignment.status, colors),
+                          const SizedBox(height: 8),
+                          Text(
+                            assignment.name,
+                            style: GoogleFonts.inter(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: colors.contentPrimary,
+                              letterSpacing: -0.8,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Аватар создателя
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colors.divider, width: 1),
+                      ),
+                      child: CircleAvatar(
+                        radius: 32,
+                        backgroundColor: colors.surfaceHigh,
+                        backgroundImage:
+                            (creatorPfp != null && creatorPfp.isNotEmpty)
+                            ? NetworkImage(creatorPfp)
+                            : null,
+                        child: (creatorPfp == null || creatorPfp.isEmpty)
+                            ? Text(
+                                "M",
+                                style: TextStyle(
+                                  color: colors.accentAction,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                ),
+                              )
+                            : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 2. PROGRESS SECTION
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+              child: _buildProgressSection(
+                progress,
+                scannedItems,
+                totalItems,
+                colors,
+              ),
+            ),
+          ),
+
+          // 3. ITEMS LIST HEADER
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'ТОВАРЫ В СПИСКЕ',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: colors.contentTertiary,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  Text(
+                    '$totalItems поз.',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: colors.contentSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 4. COMPACT ITEM CARDS
+          if (assignment.items.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildEmptyState(colors),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final item = assignment.items[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: _buildCompactItemCard(
+                      context,
+                      ref,
+                      assignment.id,
+                      item,
+                      colors,
+                    ),
+                  );
+                }, childCount: assignment.items.length),
+              ),
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 120)),
+        ],
+      ),
+      floatingActionButton: _buildScannerFAB(context, colors),
     );
   }
 
-  @override
-  void dispose() {
-    _pulseCtrl.dispose();
-    _searchController.dispose();
-    super.dispose();
+  // --- COMPONENT BUILDERS ---
+
+  Widget _buildStatusBadge(AssignmentStatus status, SkladColors colors) {
+    final isCompleted = status == AssignmentStatus.completed;
+    final color = isCompleted ? colors.success : colors.warning;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        isCompleted ? 'ЗАВЕРШЕНО' : 'В ПРОЦЕССЕ',
+        style: GoogleFonts.inter(
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          color: color,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
   }
 
-  // Stub parser – replace with your real SpreadsheetDecoder / PDF logic
-  Future<Map<String, dynamic>> _parseDocument(
-    Uint8List bytes,
-    String fileName,
-  ) async {
-    // TODO: Implement real parsing here
-    // For now return dummy data so the app runs
-    return {
-      'title': 'Накладная №${DateTime.now().millisecondsSinceEpoch % 10000}',
-      'type': 'Накладная на перемещение',
-      'items': [
-        {'name': 'Холодильник Samsung RF-123', 'code': 'RF-123', 'qty': 2},
-        {'name': 'Стиральная машина LG WM-456', 'code': 'WM-456', 'qty': 1},
-        {'name': 'Микроволновка Bosch', 'code': 'MW-789', 'qty': 3},
-      ],
-    };
-  }
-
-  Future<void> _createAssignmentFromFile(
-    Uint8List bytes,
-    String fileName,
-  ) async {
-    try {
-      final parsed = await _parseDocument(bytes, fileName);
-
-      final itemsList = parsed['items'] as List<dynamic>;
-      final title =
-          parsed['title'] as String? ??
-          'Документ от ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}';
-      final type = parsed['type'] as String? ?? 'Документ';
-
-      final items = itemsList.map((m) {
-        final map = m as Map<String, dynamic>;
-        return AssignmentItem(
-          name: map['name']?.toString() ?? '—',
-          code: map['code']?.toString() ?? '',
-          requiredQty: (map['qty'] as num?)?.toDouble() ?? 0.0,
-        );
-      }).toList();
-
-      final assignment = Assignment(
-        id: const Uuid().v4(),
-        name: title,
-        type: type,
-        createdAt: DateTime.now(),
-        items: items,
-      );
-
-      ref.read(assignmentsProvider.notifier).addAssignment(assignment);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Задание создано: $title'),
-            backgroundColor: Colors.green.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка создания задания: $e'),
-            backgroundColor: Colors.red.shade800,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleDroppedFiles(List<XFile> files) async {
-    if (files.isEmpty) return;
-
-    setState(() {
-      _isProcessingDrop = true;
-      _isDragging = false;
-    });
-
-    final allowedExt = {'csv', 'txt', 'xls', 'xlsx'};
-    bool anySuccess = false;
-
-    for (final file in files) {
-      final ext = file.name.split('.').last.toLowerCase();
-      if (!allowedExt.contains(ext)) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Пропущен неподдерживаемый файл: ${file.name}'),
-              backgroundColor: Colors.orange.shade800,
-            ),
-          );
-        }
-        continue;
-      }
-
-      try {
-        final bytes = await file.readAsBytes();
-        await _createAssignmentFromFile(bytes, file.name);
-        anySuccess = true;
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка обработки ${file.name}: $e'),
-              backgroundColor: Colors.red.shade800,
-            ),
-          );
-        }
-      }
-    }
-
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    if (mounted) {
-      setState(() => _isProcessingDrop = false);
-
-      if (anySuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Файл(ы) успешно обработаны'),
-            backgroundColor: Colors.green.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildEmptyPlaceholder() {
-    return Center(
+  Widget _buildProgressSection(
+    double progress,
+    int scanned,
+    int total,
+    SkladColors colors,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surfaceHigh,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colors.divider),
+      ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.folder_open_outlined, size: 80, color: Colors.grey),
-          const SizedBox(height: 24),
-          Text(
-            'Нет активных заданий',
-            style: TextStyle(fontSize: 20, color: Colors.grey),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Прогресс сборки',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: colors.contentSecondary,
+                ),
+              ),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w900,
+                  color: colors.accentAction,
+                  fontSize: 16,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Загрузите файл или перетащите накладную',
-            style: TextStyle(color: Colors.grey),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(100),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: colors.surfaceContainer,
+              valueColor: AlwaysStoppedAnimation<Color>(colors.accentAction),
+            ),
           ),
         ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<SkladColors>()!;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final assignments = ref.watch(assignmentsProvider);
+  Widget _buildCompactItemCard(
+    BuildContext context,
+    WidgetRef ref,
+    String assId,
+    AssignmentItem item,
+    SkladColors colors,
+  ) {
+    final isDone = item.scannedQty >= item.requiredQty;
 
-    return Scaffold(
-      backgroundColor: colors.surfaceLow,
-      appBar: AppBar(title: const Text('Задания / Накладные')),
-      body: DropTarget(
-        onDragEntered: (_) => setState(() => _isDragging = true),
-        onDragExited: (_) => setState(() => _isDragging = false),
-        onDragDone: (detail) => _handleDroppedFiles(detail.files),
-        child: Stack(
-          children: [
-            // Main content
-            SafeArea(
-              child: Column(
+    return Slidable(
+      key: Key('${assId}_${item.code}'),
+      endActionPane: ActionPane(
+        motion: const BehindMotion(),
+        extentRatio: 0.2,
+        children: [
+          SlidableAction(
+            onPressed: (context) {
+              HapticFeedback.mediumImpact();
+              ref
+                  .read(assignmentsProvider.notifier)
+                  .updateItemScan(
+                    assId,
+                    item.code,
+                    increment: -item.scannedQty,
+                  );
+            },
+            backgroundColor: colors.error,
+            foregroundColor: Colors.white,
+            icon: Icons.refresh_rounded,
+            borderRadius: const BorderRadius.horizontal(
+              right: Radius.circular(16),
+            ),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: colors.surfaceHigh,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDone
+                  ? colors.success.withValues(alpha: 0.3)
+                  : colors.divider,
+              width: isDone ? 1.5 : 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: IntrinsicHeight(
+              child: Row(
                 children: [
-                  // Optional search bar
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Поиск задания...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
+                  Container(
+                    width: 3,
+                    color: isDone ? colors.success : colors.divider,
                   ),
                   Expanded(
-                    child: assignments.isEmpty
-                        ? _buildEmptyPlaceholder()
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(12),
-                            itemCount: assignments.length,
-                            itemBuilder: (context, i) {
-                              final ass = assignments[i];
-                              final isCompleted =
-                                  ass.status == AssignmentStatus.completed;
-
-                              return Dismissible(
-                                key: ValueKey(ass.id),
-                                direction: DismissDirection.endToStart,
-                                background: Container(
-                                  color: Colors.red,
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 32),
-                                  child: const Icon(
-                                    Icons.delete,
-                                    color: Colors.white,
-                                    size: 32,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  item.name,
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: colors.contentPrimary,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                onDismissed: (_) {
-                                  ref
-                                      .read(assignmentsProvider.notifier)
-                                      .deleteAssignment(ass.id);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Задание удалено'),
-                                    ),
-                                  );
-                                },
-                                child: Card(
-                                  color: isCompleted
-                                      ? colors.neutralGray.withValues(
-                                          alpha: 0.35,
-                                        )
-                                      : null,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 12,
-                                    ),
-                                    title: Text(
-                                      ass.name,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: isCompleted
-                                            ? colors.neutralGray
-                                            : null,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      DateFormat(
-                                        'dd MMM yyyy • HH:mm',
-                                      ).format(ass.createdAt),
-                                      style: TextStyle(
-                                        color: colors.neutralGray,
-                                      ),
-                                    ),
-                                    trailing: isCompleted
-                                        ? const Icon(
-                                            Icons.check_circle,
-                                            color: Colors.green,
-                                          )
-                                        : null,
-                                    onTap: () async {
-                                      final confirmed = await showDialog<bool>(
-                                        context: context,
-                                        builder: (context) => AlertDialog(
-                                          title: const Text('Открыть задание?'),
-                                          content: Text(ass.name),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Navigator.pop(context, false),
-                                              child: const Text('Отмена'),
-                                            ),
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Navigator.pop(context, true),
-                                              child: const Text('Открыть'),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-
-                                      if (confirmed == true &&
-                                          context.mounted) {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                AssignmentDetailsPage(
-                                                  assignmentId: ass.id,
-                                                ),
-                                          ),
-                                        );
-                                      }
-                                    },
-                                  ),
+                              ),
+                              if (isDone)
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  color: colors.success,
+                                  size: 16,
                                 ),
-                              );
-                            },
+                            ],
                           ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colors.surfaceContainer,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  item.code,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    color: colors.contentSecondary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "План: ${item.requiredQty.toInt()}",
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: colors.accentAction.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              _buildCompactStepper(ref, assId, item, colors),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
 
-            // Drag overlay
-            if (_isDragging || _isProcessingDrop)
-              IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: 1.0,
-                  duration: const Duration(milliseconds: 280),
-                  child: Container(
-                    color: isDark
-                        ? Colors.grey.shade900.withValues(alpha: 0.62)
-                        : Colors.grey.shade800.withValues(alpha: 0.55),
-                    child: Center(
-                      child: ScaleTransition(
-                        scale: _isProcessingDrop
-                            ? Tween<double>(begin: 0.88, end: 1.0).animate(
-                                CurvedAnimation(
-                                  parent: AnimationController(
-                                    vsync: this,
-                                    duration: const Duration(milliseconds: 650),
-                                  )..forward(),
-                                  curve: Curves.elasticOut,
-                                ),
-                              )
-                            : _pulseAnim,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 420),
-                              transitionBuilder: (child, anim) =>
-                                  FadeTransition(
-                                    opacity: anim,
-                                    child: ScaleTransition(
-                                      scale: anim,
-                                      child: child,
-                                    ),
-                                  ),
-                              child: Icon(
-                                _isProcessingDrop
-                                    ? Icons.cloud_done_rounded
-                                    : Icons.cloud_upload_outlined,
-                                key: ValueKey<bool>(_isProcessingDrop),
-                                size: 100,
-                                color: _isProcessingDrop
-                                    ? colors.accentAction
-                                    : Colors.white.withValues(alpha: 0.92),
-                              ),
-                            ),
-                            const SizedBox(height: 28),
-                            Text(
-                              _isProcessingDrop
-                                  ? 'Обработка...'
-                                  : 'Отпустите файлы',
-                              style: GoogleFonts.inter(
-                                fontSize: 27,
-                                fontWeight: FontWeight.w700,
-                                color: _isProcessingDrop
-                                    ? colors.accentAction
-                                    : Colors.white.withValues(alpha: 0.96),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Поддерживаются: .csv .txt .xls .xlsx',
-                              style: GoogleFonts.inter(
-                                fontSize: 15,
-                                color: Colors.white.withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+  Widget _buildCompactStepper(
+    WidgetRef ref,
+    String assId,
+    AssignmentItem item,
+    SkladColors colors,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _miniStepperButton(
+            icon: Icons.remove_rounded,
+            onTap: () {
+              if (item.scannedQty <= 0) return;
+              HapticFeedback.lightImpact();
+              ref
+                  .read(assignmentsProvider.notifier)
+                  .updateItemScan(assId, item.code, increment: -1.0);
+            },
+            colors: colors,
+          ),
+          Container(
+            constraints: const BoxConstraints(minWidth: 32),
+            alignment: Alignment.center,
+            child: Text(
+              item.scannedQty.toStringAsFixed(0),
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+                color: colors.contentPrimary,
+              ),
+            ),
+          ),
+          _miniStepperButton(
+            icon: Icons.add_rounded,
+            onTap: () {
+              if (item.scannedQty >= item.requiredQty) return;
+              HapticFeedback.mediumImpact();
+              ref
+                  .read(assignmentsProvider.notifier)
+                  .updateItemScan(assId, item.code, increment: 1.0);
+            },
+            colors: colors,
+            isAdd: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniStepperButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required SkladColors colors,
+    bool isAdd = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Icon(
+          icon,
+          size: 14,
+          color: isAdd ? colors.accentAction : colors.contentTertiary,
+        ),
+      ),
+    );
+  }
+
+  void _showInfoSheet(
+    BuildContext context,
+    Assignment ass,
+    SkladColors colors,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: colors.surfaceHigh,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colors.divider,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              "Сведения о заказе",
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: colors.contentPrimary,
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Используем динамические данные из модели с нейтральными заглушками
+            _buildInfoRow(
+              "Документ основание",
+              ass.documentBase ?? "Не указано",
+              colors,
+            ),
+            _buildInfoRow("Отправитель", ass.sender ?? "Не указано", colors),
+            _buildInfoRow("Получатель", ass.receiver ?? "Не указано", colors),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colors.accentAction,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text("Понятно"),
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, SkladColors colors) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: colors.contentTertiary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: colors.contentPrimary,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScannerFAB(BuildContext context, SkladColors colors) {
+    return FloatingActionButton.extended(
+      onPressed: () {
+        HapticFeedback.heavyImpact();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ScannerPage()),
+        );
+      },
+      backgroundColor: colors.accentAction,
+      icon: const Icon(
+        Icons.qr_code_scanner_rounded,
+        color: Colors.white,
+        size: 20,
+      ),
+      label: Text(
+        'СКАНЕР',
+        style: GoogleFonts.inter(
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.5,
+          color: Colors.white,
+          fontSize: 12,
+        ),
+      ),
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    );
+  }
+
+  Widget _buildEmptyState(SkladColors colors) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.inventory_2_rounded,
+            size: 64,
+            color: colors.contentTertiary.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Список пуст',
+            style: GoogleFonts.inter(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: colors.contentPrimary.withValues(alpha: 0.8),
+            ),
+          ),
+          Text(
+            'Товары не найдены',
+            style: TextStyle(
+              color: colors.contentSecondary.withValues(alpha: 0.6),
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }

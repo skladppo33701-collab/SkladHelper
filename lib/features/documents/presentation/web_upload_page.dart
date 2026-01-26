@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
-import 'dart:ui'; // Required for PathMetric
+import 'package:google_fonts/google_fonts.dart';
+import 'dart:ui';
 import '../services/document_service.dart';
 
 class WebUploadPage extends StatefulWidget {
@@ -20,19 +21,15 @@ class _WebUploadPageState extends State<WebUploadPage> {
 
   Future<void> _pickFile() async {
     try {
-      // 1. Just PICK the file. Do NOT upload here.
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['xlsx', 'xls', 'pdf'],
-        withData: true, // Critical for Web: loads bytes into memory
+        withData: true,
       );
 
-      // 2. Update UI only
       if (result != null) {
         setState(() {
           _pickedFile = result.files.first;
-
-          // Auto-detect type
           final name = _pickedFile!.name.toLowerCase();
           if (name.contains('rot')) {
             _docType = 'rot';
@@ -43,18 +40,17 @@ class _WebUploadPageState extends State<WebUploadPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Ошибка выбора файла: $e')));
+      _showErrorSnackBar('Ошибка выбора файла: $e');
     }
   }
 
   Future<void> _uploadAndProcess() async {
-    if (_pickedFile == null) return;
+    if (_pickedFile == null || _pickedFile!.bytes == null) return;
 
     setState(() => _isUploading = true);
 
     try {
+      // Call the service method to handle parsing and saving
       await _documentService.processUpload(
         _pickedFile!.bytes!,
         _pickedFile!.name,
@@ -62,40 +58,43 @@ class _WebUploadPageState extends State<WebUploadPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Документ успешно загружен и отправлен на обработку',
-          ),
-          duration: const Duration(seconds: 4),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      );
+      _showSuccessSnackBar('Документ успешно обработан и добавлен в базу');
 
-      // Если хочешь сбросить выбор файла после успеха
-      if (mounted) {
-        setState(() {
-          _pickedFile = null;
-          _docType = 'auto'; // или что там у тебя по умолчанию
-        });
-      }
+      setState(() {
+        _pickedFile = null;
+        _docType = 'auto';
+      });
     } catch (e) {
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка обработки: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      _showErrorSnackBar(e.toString());
     } finally {
       if (mounted) {
         setState(() => _isUploading = false);
       }
     }
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Theme.of(context).extension<SkladColors>()?.success,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   @override
@@ -106,166 +105,195 @@ class _WebUploadPageState extends State<WebUploadPage> {
     return Scaffold(
       backgroundColor: proColors.surfaceLow,
       appBar: AppBar(
-        title: const Text("Загрузка документов (Web)"),
+        title: Text(
+          "Импорт (Web)",
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
       ),
       body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(32),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(isDark),
+                const SizedBox(height: 48),
+                _buildDropZone(proColors, isDark),
+                const SizedBox(height: 32),
+                if (_pickedFile != null) _buildActions(proColors),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(bool isDark) {
+    return Column(
+      children: [
+        Text(
+          "Автоматизация Склада",
+          textAlign: TextAlign.center,
+          style: GoogleFonts.inter(
+            fontSize: 28,
+            fontWeight: FontWeight.w900,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+            letterSpacing: -1,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          "Загрузите накладную в формате Excel или PDF для автоматического распознавания товаров и создания задач.",
+          textAlign: TextAlign.center,
+          style: GoogleFonts.inter(
+            color: Colors.grey.shade500,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDropZone(SkladColors proColors, bool isDark) {
+    return InkWell(
+      onTap: _pickFile,
+      borderRadius: BorderRadius.circular(24),
+      child: CustomPaint(
+        painter: _DashedBorderPainter(
+          color: proColors.accentAction.withValues(alpha: 0.3),
+          strokeWidth: 2,
+          radius: 24,
+        ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          height: 280,
+          decoration: BoxDecoration(
+            color: proColors.surfaceHigh.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                "Импорт накладных (Excel/PDF)",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+              if (_pickedFile == null) ...[
+                Icon(
+                  Icons.upload_file_rounded,
+                  size: 64,
+                  color: proColors.accentAction,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Загрузите файлы для автоматического создания задач.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: proColors.neutralGray, fontSize: 16),
-              ),
-              const SizedBox(height: 40),
-
-              // --- PICK FILE ZONE ---
-              InkWell(
-                onTap: _pickFile,
-                borderRadius: BorderRadius.circular(20),
-                child: CustomPaint(
-                  painter: _DashedBorderPainter(
-                    color: proColors.accentAction.withValues(alpha: 0.5),
-                    strokeWidth: 2,
-                    radius: 20,
+                const SizedBox(height: 20),
+                Text(
+                  "Выбрать файл",
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: proColors.accentAction,
                   ),
-                  child: Container(
-                    height: 250,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: proColors.surfaceHigh.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(20),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  ".xlsx, .xls, .pdf",
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ] else ...[
+                Icon(
+                  Icons.check_circle_outline_rounded,
+                  size: 64,
+                  color: proColors.success,
+                ),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    _pickedFile!.name,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (_pickedFile == null) ...[
-                          Icon(
-                            Icons.cloud_upload_outlined,
-                            size: 64,
-                            color: proColors.accentAction,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            "Нажмите чтобы выбрать файл",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: proColors.accentAction,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "Поддерживаются .xlsx, .xls, .pdf",
-                            style: TextStyle(color: proColors.neutralGray),
-                          ),
-                        ] else ...[
-                          Icon(
-                            Icons.description,
-                            size: 64,
-                            color: proColors.success,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _pickedFile!.name,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "${(_pickedFile!.size / 1024).toStringAsFixed(1)} KB",
-                            style: TextStyle(color: proColors.neutralGray),
-                          ),
-                        ],
-                      ],
-                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // --- UPLOAD BUTTON & TYPE SELECTOR ---
-              if (_pickedFile != null) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        key: ValueKey(_docType),
-                        initialValue: _docType,
-                        decoration: InputDecoration(
-                          labelText: "Тип документа",
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'auto',
-                            child: Text("Автоматически"),
-                          ),
-                          DropdownMenuItem(
-                            value: 'rot',
-                            child: Text("РОТ (Расход)"),
-                          ),
-                          DropdownMenuItem(
-                            value: 'pot',
-                            child: Text("ПОТ (Приход)"),
-                          ),
-                        ],
-                        onChanged: (val) => setState(() => _docType = val!),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isUploading ? null : _uploadAndProcess,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: proColors.accentAction,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: _isUploading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            "Загрузить и Обработать",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  ),
+                const SizedBox(height: 8),
+                Text(
+                  "${(_pickedFile!.size / 1024).toStringAsFixed(1)} KB",
+                  style: TextStyle(color: Colors.grey.shade500),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildActions(SkladColors proColors) {
+    return Column(
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: _docType,
+          decoration: InputDecoration(
+            labelText: "Тип документа",
+            filled: true,
+            fillColor: proColors.surfaceHigh,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+          ),
+          items: const [
+            DropdownMenuItem(value: 'auto', child: Text("Автоматически")),
+            DropdownMenuItem(value: 'rot', child: Text("Расход (РОТ)")),
+            DropdownMenuItem(value: 'pot', child: Text("Приход (ПОТ)")),
+          ],
+          onChanged: (val) => setState(() => _docType = val!),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 60,
+          child: ElevatedButton(
+            onPressed: _isUploading ? null : _uploadAndProcess,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: proColors.accentAction,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+            child: _isUploading
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 3,
+                    ),
+                  )
+                : const Text(
+                    "Импортировать в базу",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+          ),
+        ),
+        TextButton(
+          onPressed: () => setState(() => _pickedFile = null),
+          child: const Text("Сбросить выбор"),
+        ),
+      ],
     );
   }
 }
@@ -297,8 +325,8 @@ class _DashedBorderPainter extends CustomPainter {
       );
 
     final Path dashedPath = Path();
-    double dashWidth = 8.0;
-    double dashSpace = 4.0;
+    double dashWidth = 10.0;
+    double dashSpace = 6.0;
     double distance = 0.0;
 
     for (final PathMetric measurePath in path.computeMetrics()) {

@@ -15,7 +15,6 @@ class AssignmentItem {
 
   bool get isCompleted => scannedQty >= requiredQty;
 
-  // FIX: Correct string interpolation
   String get progressText => '${scannedQty.toInt()}/${requiredQty.toInt()}';
 
   AssignmentItem copyWith({double? scannedQty}) {
@@ -36,6 +35,14 @@ class Assignment {
   final List<AssignmentItem> items;
   AssignmentStatus status;
 
+  // Requirement: Logistics metadata extracted from Excel
+  final String? documentBase;
+  final String? sender;
+  final String? receiver;
+  final String? creatorId;
+  final String? creatorName;
+  final String? creatorPhotoUrl;
+
   Assignment({
     required this.id,
     required this.name,
@@ -43,6 +50,12 @@ class Assignment {
     required this.createdAt,
     required this.items,
     this.status = AssignmentStatus.created,
+    this.documentBase,
+    this.sender,
+    this.receiver,
+    this.creatorId,
+    this.creatorName,
+    this.creatorPhotoUrl,
   });
 
   Assignment copyWith({
@@ -52,6 +65,9 @@ class Assignment {
     DateTime? createdAt,
     List<AssignmentItem>? items,
     AssignmentStatus? status,
+    String? documentBase,
+    String? sender,
+    String? receiver,
   }) {
     return Assignment(
       id: id ?? this.id,
@@ -60,8 +76,12 @@ class Assignment {
       createdAt: createdAt ?? this.createdAt,
       items: items ?? this.items,
       status: status ?? this.status,
+      documentBase: documentBase ?? this.documentBase,
+      sender: sender ?? this.sender,
+      receiver: receiver ?? this.receiver,
+      creatorId: creatorId,
+      creatorName: creatorName,
+      creatorPhotoUrl: creatorPhotoUrl,
     );
   }
-
-  bool get isReadyToComplete => items.every((i) => i.isCompleted);
 }
