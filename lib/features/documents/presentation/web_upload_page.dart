@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // Added for ConsumerState
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui';
+import 'dart:async';
 
 // Core & Theme
 import '../../../../core/theme.dart';
 // Corrected path to auth_provider
 import '../services/document_service.dart';
 
+enum UploadStep { idle, uploading, scanning, validating, optimizing, complete }
+
 class WebUploadPage extends ConsumerStatefulWidget {
-  // Changed to ConsumerStatefulWidget
   const WebUploadPage({super.key});
 
   @override
@@ -18,9 +20,8 @@ class WebUploadPage extends ConsumerStatefulWidget {
 }
 
 class _WebUploadPageState extends ConsumerState<WebUploadPage> {
-  // Changed to ConsumerState
   PlatformFile? _pickedFile;
-  bool _isUploading = false;
+  UploadStep _currentStep = UploadStep.idle;
   String _docType = 'auto';
 
   final DocumentService _documentService = DocumentService();
@@ -53,34 +54,50 @@ class _WebUploadPageState extends ConsumerState<WebUploadPage> {
   Future<void> _uploadAndProcess() async {
     if (_pickedFile == null || _pickedFile!.bytes == null) return;
 
-    // Optional: Check auth state before upload if required
-    // final user = ref.read(authProvider).value;
-    // if (user == null) { ... }
-
-    setState(() => _isUploading = true);
+    // Start the agentic sequence
+    setState(() => _currentStep = UploadStep.uploading);
 
     try {
-      // Call the service method to handle parsing and saving
+      // Step 1: Uploading (Artificial delay for UX perception)
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      // Step 2: Scanning Structure
+      if (!mounted) return;
+      setState(() => _currentStep = UploadStep.scanning);
+      await Future.delayed(const Duration(milliseconds: 1200));
+
+      // Step 3: Validating Schema (Actual processing happens here)
+      if (!mounted) return;
+      setState(() => _currentStep = UploadStep.validating);
+
+      // Perform the actual heavy lifting
       await _documentService.processUpload(
         _pickedFile!.bytes!,
         _pickedFile!.name,
       );
 
+      // Step 4: Optimization
       if (!mounted) return;
+      setState(() => _currentStep = UploadStep.optimizing);
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      // Step 5: Complete
+      if (!mounted) return;
+      setState(() => _currentStep = UploadStep.complete);
+      await Future.delayed(const Duration(milliseconds: 500));
 
       _showSuccessSnackBar('Документ успешно обработан и добавлен в базу');
 
+      if (!mounted) return;
       setState(() {
         _pickedFile = null;
         _docType = 'auto';
+        _currentStep = UploadStep.idle;
       });
     } catch (e) {
       if (!mounted) return;
       _showErrorSnackBar(e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _isUploading = false);
-      }
+      setState(() => _currentStep = UploadStep.idle);
     }
   }
 
@@ -136,7 +153,7 @@ class _WebUploadPageState extends ConsumerState<WebUploadPage> {
                 const SizedBox(height: 48),
                 _buildDropZone(proColors, isDark),
                 const SizedBox(height: 32),
-                if (_pickedFile != null) _buildActions(proColors),
+                if (_pickedFile != null) _buildActions(proColors, isDark),
               ],
             ),
           ),
@@ -173,8 +190,10 @@ class _WebUploadPageState extends ConsumerState<WebUploadPage> {
   }
 
   Widget _buildDropZone(SkladColors proColors, bool isDark) {
+    final isProcessing = _currentStep != UploadStep.idle;
+
     return InkWell(
-      onTap: _pickFile,
+      onTap: isProcessing ? null : _pickFile,
       borderRadius: BorderRadius.circular(24),
       child: CustomPaint(
         painter: _DashedBorderPainter(
@@ -249,7 +268,11 @@ class _WebUploadPageState extends ConsumerState<WebUploadPage> {
     );
   }
 
-  Widget _buildActions(SkladColors proColors) {
+  Widget _buildActions(SkladColors proColors, bool isDark) {
+    if (_currentStep != UploadStep.idle) {
+      return _buildAgenticProgress(proColors, isDark);
+    }
+
     return Column(
       children: [
         DropdownButtonFormField<String>(
@@ -275,7 +298,7 @@ class _WebUploadPageState extends ConsumerState<WebUploadPage> {
           width: double.infinity,
           height: 60,
           child: ElevatedButton(
-            onPressed: _isUploading ? null : _uploadAndProcess,
+            onPressed: _uploadAndProcess,
             style: ElevatedButton.styleFrom(
               backgroundColor: proColors.accentAction,
               foregroundColor: Colors.white,
@@ -284,19 +307,10 @@ class _WebUploadPageState extends ConsumerState<WebUploadPage> {
                 borderRadius: BorderRadius.circular(18),
               ),
             ),
-            child: _isUploading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 3,
-                    ),
-                  )
-                : const Text(
-                    "Импортировать в базу",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                  ),
+            child: const Text(
+              "Импортировать в базу",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
           ),
         ),
         TextButton(
@@ -304,6 +318,142 @@ class _WebUploadPageState extends ConsumerState<WebUploadPage> {
           child: const Text("Сбросить выбор"),
         ),
       ],
+    );
+  }
+
+  Widget _buildAgenticProgress(SkladColors proColors, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: proColors.surfaceHigh,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: proColors.accentAction.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                "AI Process",
+                style: GoogleFonts.spaceMono(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: proColors.accentAction,
+                ),
+              ),
+              const Spacer(),
+              if (_currentStep != UploadStep.complete)
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: proColors.accentAction,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildStepRow(
+            "Загрузка файла",
+            UploadStep.uploading,
+            proColors,
+            isDark,
+          ),
+          _buildStepRow(
+            "Сканирование структуры",
+            UploadStep.scanning,
+            proColors,
+            isDark,
+          ),
+          _buildStepRow(
+            "Валидация схемы",
+            UploadStep.validating,
+            proColors,
+            isDark,
+          ),
+          _buildStepRow(
+            "Оптимизация запасов",
+            UploadStep.optimizing,
+            proColors,
+            isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepRow(
+    String title,
+    UploadStep step,
+    SkladColors colors,
+    bool isDark,
+  ) {
+    // Determine the state of this specific row
+    final stepIndex = UploadStep.values.indexOf(step);
+    final currentIndex = UploadStep.values.indexOf(_currentStep);
+
+    bool isCompleted = currentIndex > stepIndex;
+    bool isActive = currentIndex == stepIndex;
+
+    Color textColor;
+    if (isCompleted || isActive) {
+      textColor = isDark ? Colors.white : Colors.black87;
+    } else {
+      textColor = Colors.grey.shade500;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isCompleted
+                  ? colors.success
+                  : isActive
+                  ? colors.accentAction
+                  : colors.surfaceLow,
+              border: Border.all(
+                color: isCompleted || isActive
+                    ? Colors.transparent
+                    : Colors.grey.shade400,
+                width: 2,
+              ),
+            ),
+            child: isCompleted
+                ? const Icon(Icons.check, size: 12, color: Colors.white)
+                : isActive
+                ? Center(
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 12),
+          Text(
+            title,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+              color: textColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

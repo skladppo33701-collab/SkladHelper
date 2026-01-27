@@ -43,11 +43,11 @@ final notificationsProvider = NotifierProvider<NotificationNotifier, bool>(
   NotificationNotifier.new,
 );
 
+// Note: Usage removed from UI but provider kept if needed elsewhere
 final userCreatedTasksProvider = StreamProvider.autoDispose<int>((ref) {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return Stream.value(0);
 
-  // Changed collection from 'assignments' to 'tasks' per previous logic
   return FirebaseFirestore.instance
       .collection('tasks')
       .where('creatorId', isEqualTo: user.uid)
@@ -85,7 +85,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  // --- Sovereign Notifications (Consistent with Inventory Page) ---
+  // --- Revised Sovereign Notifications (High Contrast) ---
   void _showSovereignNotification(
     String message,
     IconData icon,
@@ -94,45 +94,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   ) {
     if (!mounted) return;
 
+    // Use a high contrast background (Dark on light mode, Light on dark mode)
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
+    final textColor = isDark ? const Color(0xFF0F172A) : Colors.white;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         elevation: 0,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         content: Container(
           padding: const EdgeInsets.symmetric(
             horizontal: Dimens.paddingCard, // 16
-            vertical: Dimens.gapM, // 12
+            vertical: 14,
           ),
           decoration: BoxDecoration(
-            color: colors.surfaceHigh.withValues(alpha: 0.98),
-            borderRadius: BorderRadius.circular(Dimens.radiusL), // 16
-            border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+            color: bgColor,
+            borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(Dimens.gapS), // 8
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.1),
+                  color: accentColor.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: accentColor, size: 20),
               ),
-              const SizedBox(width: Dimens.gapM), // 12
+              const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   message,
                   style: GoogleFonts.inter(
-                    color: colors.contentPrimary,
+                    color: textColor,
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
                   ),
@@ -152,54 +156,62 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: colors.surfaceLow, // "Executive Slate" background
+      backgroundColor: colors.surfaceLow,
       body: userAsync.when(
         data: (user) {
           if (user == null) return const Center(child: Text("Нет данных"));
 
           return CustomScrollView(
-            physics: const BouncingScrollPhysics(),
+            physics: const ClampingScrollPhysics(),
             slivers: [
-              // 1. HEADER
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    Dimens.gapXl, // 24
-                    52, // Top Safe Area approx
-                    Dimens.gapXl, // 24
-                    Dimens.gapL, // 16
+              // 1. COLLAPSIBLE APP BAR
+              SliverAppBar(
+                expandedHeight: 140.0,
+                floating: false,
+                pinned: true,
+                backgroundColor: colors.surfaceLow,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                systemOverlayStyle: isDark
+                    ? SystemUiOverlayStyle.light
+                    : SystemUiOverlayStyle.dark,
+                leading: const SizedBox(), // Hide default back button
+                leadingWidth: 0,
+                actions: [
+                  // Exit Button - Pinned to right
+                  Padding(
+                    padding: const EdgeInsets.only(right: 24),
+                    child: IconButton(
+                      onPressed: () => FirebaseAuth.instance.signOut(),
+                      icon: Icon(
+                        Icons.logout_rounded,
+                        color: colors.error,
+                        size: 20,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: colors.error.withValues(alpha: 0.1),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        padding: const EdgeInsets.all(10),
+                        minimumSize: const Size(44, 44),
+                      ),
+                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Настройки',
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w700,
-                          color: colors.contentPrimary,
-                          fontSize: 26,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => FirebaseAuth.instance.signOut(),
-                        icon: Icon(
-                          Icons.logout_rounded,
-                          color: colors.error,
-                          size: 20,
-                        ),
-                        style: IconButton.styleFrom(
-                          backgroundColor: colors.error.withValues(alpha: 0.1),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              Dimens.radiusM,
-                            ), // 12
-                          ),
-                          padding: const EdgeInsets.all(Dimens.gapS), // 8
-                          minimumSize: const Size(36, 36),
-                        ),
-                      ),
-                    ],
+                ],
+                flexibleSpace: FlexibleSpaceBar(
+                  centerTitle: false,
+                  // [ALIGNMENT FIX] Bottom 16px ensures it centers vertically in collapsed 56px height
+                  // Left 24px matches the general padding
+                  titlePadding: const EdgeInsets.only(left: 24, bottom: 16),
+                  expandedTitleScale: 1.6,
+                  title: Text(
+                    'Настройки',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w700,
+                      color: colors.contentPrimary,
+                      // Ensure font matches the identity card style
+                    ),
                   ),
                 ),
               ),
@@ -207,34 +219,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               // 2. IDENTITY CARD
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Dimens.gapXl,
-                  ), // 24
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: _buildIdentityCard(context, user, colors, isDark),
                 ),
               ),
 
-              const SliverToBoxAdapter(
-                child: SizedBox(height: Dimens.gapL),
-              ), // 16
-              // 3. STATS GRID (Bento Style)
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Dimens.gapXl,
-                ), // 24
-                sliver: SliverToBoxAdapter(
-                  child: _buildStatsGrid(context, colors),
-                ),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
 
-              const SliverToBoxAdapter(
-                child: SizedBox(height: Dimens.gapXl),
-              ), // 24
-              // 4. SETTINGS LIST
+              // 3. SETTINGS LIST
               SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Dimens.gapXl,
-                ), // 24
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     _buildSectionHeader('ПРИЛОЖЕНИЕ', colors),
@@ -271,7 +265,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ],
                     ),
 
-                    const SizedBox(height: Dimens.gapXl), // 24
+                    const SizedBox(height: 32),
                     _buildSectionHeader('АККАУНТ', colors),
                     _buildSettingsGroup(
                       context,
@@ -284,7 +278,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           colors,
                           () => _showEditSheet(
                             context,
-                            'Новый Email',
+                            'Изменить Email',
                             user.email,
                             (v) async {
                               if (v.isNotEmpty) {
@@ -308,7 +302,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         _buildDivider(colors),
                         _buildNavRow(
                           'Пароль',
-                          'Изменить',
+                          'Обновить',
                           Icons.lock_outline_rounded,
                           colors,
                           () => _showPasswordResetSheet(
@@ -319,8 +313,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ),
                         _buildDivider(colors),
                         _buildNavRow(
-                          'Данные',
-                          'Очистить кэш',
+                          'Кэш данных',
+                          'Очистить',
                           Icons.cleaning_services_outlined,
                           colors,
                           () {
@@ -328,7 +322,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             PaintingBinding.instance.imageCache
                                 .clearLiveImages();
                             _showSovereignNotification(
-                              'Локальный кэш очищен',
+                              'Кэш успешно очищен',
                               Icons.cleaning_services_rounded,
                               colors.accentAction,
                               colors,
@@ -341,23 +335,34 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
               ),
 
-              // 5. VERSION AT BOTTOM
+              // 4. VERSION AT BOTTOM
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: Padding(
-                    padding: const EdgeInsets.only(
-                      top: 32,
-                      bottom: Dimens.gapXl,
-                    ), // 24
-                    child: Text(
-                      "Версия $_appVersion",
-                      style: GoogleFonts.inter(
-                        color: colors.contentTertiary,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12,
-                      ),
+                    padding: const EdgeInsets.only(top: 48, bottom: 32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Sklad Helper",
+                          style: GoogleFonts.outfit(
+                            color: colors.contentPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Версия $_appVersion",
+                          style: GoogleFonts.inter(
+                            color: colors.contentTertiary,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -383,264 +388,183 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     SkladColors colors,
     bool isDark,
   ) {
+    // [ROLE LOGIC UPDATE] Only allow Loader/Storekeeper
+    String roleDisplay = 'Сотрудник';
+    Color roleColor = colors.contentSecondary;
+
+    try {
+      final r = user.role.name.toLowerCase();
+      if (r.contains('storekeeper')) {
+        roleDisplay = 'Кладовщик';
+        roleColor = colors.accentAction;
+      } else if (r.contains('loader')) {
+        roleDisplay = 'Грузчик';
+        roleColor = const Color(0xFFF59E0B); // Amber
+      }
+      // Everything else defaults to 'Сотрудник' and neutral color
+    } catch (_) {
+      // Fallback
+    }
+
     return Container(
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(
-          Dimens.radiusXl,
-        ), // 18 approx -> 24 in system, sticking to 18 for specific visual
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: colors.divider),
         boxShadow: [
           if (!isDark)
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(Dimens.radiusXl),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.all(Dimens.paddingCard), // 16
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: () => _updateProfilePicture(context, user.uid),
-                child: Stack(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [
-                            colors.accentAction,
-                            colors.accentAction.withValues(alpha: 0.6),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: colors.surfaceHigh,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(3),
-                        child: CircleAvatar(
-                          radius: 28,
-                          backgroundColor: colors.surfaceContainer,
-                          backgroundImage: user.photoUrl != null
-                              ? NetworkImage(user.photoUrl!)
-                              : null,
-                          child: _isUploading
-                              ? SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: colors.accentAction,
-                                  ),
-                                )
-                              : (user.photoUrl == null
-                                    ? Icon(
-                                        Icons.person_outline_rounded,
-                                        size: 24,
-                                        color: colors.neutralGray,
-                                      )
-                                    : null),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: colors.accentAction,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: colors.surfaceHigh,
-                            width: 2,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt_rounded,
-                          size: 10,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Dimens.gapL), // 16
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      user.name.isEmpty ? 'Пользователь' : user.name,
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: colors.contentPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      user.email,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: colors.contentSecondary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: Dimens.gapS), // 8
-                    InkWell(
-                      onTap: () => _showEditSheet(
-                        context,
-                        'Ваше имя',
-                        user.name,
-                        (val) async {
-                          if (val.isNotEmpty) {
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(user.uid)
-                                .update({'name': val});
-                            if (!mounted) return;
-                            ref.invalidate(userRoleProvider);
-                            _showSovereignNotification(
-                              'Имя обновлено',
-                              Icons.person_rounded,
-                              colors.accentAction,
-                              colors,
-                            );
-                          }
-                        },
-                      ),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.surfaceContainer,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'Редактировать',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: colors.contentPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatsGrid(BuildContext context, SkladColors colors) {
-    // Use the updated provider name
-    final created = ref.watch(userCreatedTasksProvider).asData?.value ?? 0;
-
-    return IntrinsicHeight(
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
-            child: _buildBigStatCard(
-              'Статус',
-              'Активен',
-              Icons.verified_user_rounded,
-              colors.success,
-              colors,
+          // Profile Picture with Gradient
+          GestureDetector(
+            onTap: () => _updateProfilePicture(context, user.uid),
+            child: Container(
+              // [PFP UPDATE] Thinner circle padding (3.0 -> 1.5)
+              padding: const EdgeInsets.all(1.5),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    colors.accentAction,
+                    colors.accentAction.withValues(alpha: 0.3),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colors.surfaceHigh,
+                  shape: BoxShape.circle,
+                ),
+                padding: const EdgeInsets.all(3),
+                child: CircleAvatar(
+                  radius: 32,
+                  backgroundColor: colors.surfaceContainer,
+                  backgroundImage: user.photoUrl != null
+                      ? NetworkImage(user.photoUrl!)
+                      : null,
+                  child: _isUploading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colors.accentAction,
+                          ),
+                        )
+                      : (user.photoUrl == null
+                            ? Icon(
+                                Icons.person_rounded,
+                                size: 32,
+                                color: colors.neutralGray,
+                              )
+                            : null),
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: Dimens.gapM), // 12
-          Expanded(
-            child: _buildBigStatCard(
-              'Создано',
-              '$created',
-              Icons.assignment_add,
-              colors.accentAction,
-              colors,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+          const SizedBox(width: 20),
 
-  Widget _buildBigStatCard(
-    String title,
-    String value,
-    IconData icon,
-    Color accent,
-    SkladColors colors,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(Dimens.paddingCard), // 16
-      decoration: BoxDecoration(
-        color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(Dimens.radiusXl), // 18
-        border: Border.all(color: colors.divider),
-        boxShadow: [
-          if (Theme.of(context).brightness == Brightness.light)
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
+          // Info Column
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Role Badge (Restricted to Loader/Storekeeper)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: roleColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    roleDisplay.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: roleColor,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Name
+                Text(
+                  user.name.isEmpty ? 'Без имени' : user.name,
+                  style: GoogleFonts.outfit(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: colors.contentPrimary,
+                    height: 1.1,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+
+                // Email
+                Text(
+                  user.email,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: colors.contentSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(Dimens.gapS), // 8
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: accent, size: 20),
           ),
-          const SizedBox(height: Dimens.gapM), // 12
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.inter(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: colors.contentPrimary,
-                ),
+
+          // Edit Button (Minimal)
+          IconButton(
+            onPressed: () => _showEditSheet(
+              context,
+              'Редактировать имя',
+              user.name,
+              (val) async {
+                if (val.isNotEmpty) {
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.uid)
+                      .update({'name': val});
+                  if (!mounted) return;
+                  ref.invalidate(userRoleProvider);
+                  _showSovereignNotification(
+                    'Имя успешно обновлено',
+                    Icons.check_circle_rounded,
+                    colors.success,
+                    colors,
+                  );
+                }
+              },
+            ),
+            icon: Icon(
+              Icons.edit_rounded,
+              size: 20,
+              color: colors.contentTertiary,
+            ),
+            style: IconButton.styleFrom(
+              backgroundColor: colors.surfaceContainer,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  color: colors.contentSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -655,7 +579,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return Container(
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(Dimens.radiusXl), // 18
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: colors.divider),
       ),
       clipBehavior: Clip.antiAlias,
@@ -671,39 +595,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     SkladColors colors,
   ) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(Dimens.gapS), // 8
-            decoration: BoxDecoration(
-              color: colors.surfaceContainer,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: colors.contentSecondary, size: 18),
-          ),
-          const SizedBox(width: Dimens.gapL), // 16
+          _buildIconContainer(icon, colors),
+          const SizedBox(width: 16),
           Expanded(
             child: Text(
               title,
               style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
                 color: colors.contentPrimary,
               ),
             ),
           ),
-          Transform.scale(
-            scale: 0.8,
-            child: Switch.adaptive(
-              value: value,
-              onChanged: (v) {
-                HapticFeedback.lightImpact();
-                onChanged(v);
-              },
-              activeThumbColor: colors.accentAction,
-              inactiveTrackColor: colors.surfaceContainer,
-            ),
+          Switch.adaptive(
+            value: value,
+            onChanged: (v) {
+              HapticFeedback.lightImpact();
+              onChanged(v);
+            },
+            activeThumbColor: colors.accentAction,
+            activeTrackColor: colors.accentAction.withValues(alpha: 0.2),
           ),
         ],
       ),
@@ -722,18 +636,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(Dimens.gapS), // 8
-                decoration: BoxDecoration(
-                  color: colors.surfaceContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: colors.contentSecondary, size: 18),
-              ),
-              const SizedBox(width: Dimens.gapL), // 16
+              _buildIconContainer(icon, colors),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -741,29 +648,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Text(
                       title,
                       style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
                         color: colors.contentPrimary,
                       ),
                     ),
-                    if (subtitle != null && subtitle.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          subtitle,
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: colors.contentSecondary,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
+              if (subtitle != null)
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: colors.contentTertiary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              const SizedBox(width: 8),
               Icon(
                 Icons.chevron_right_rounded,
                 color: colors.contentTertiary,
-                size: 18,
+                size: 20,
               ),
             ],
           ),
@@ -772,26 +678,37 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  Widget _buildIconContainer(IconData icon, SkladColors colors) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: colors.contentSecondary, size: 20),
+    );
+  }
+
   Widget _buildSectionHeader(String title, SkladColors colors) {
     return Padding(
-      padding: const EdgeInsets.only(left: 12, bottom: 8),
+      padding: const EdgeInsets.only(left: 12, bottom: 10),
       child: Text(
         title.toUpperCase(),
         style: GoogleFonts.inter(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
           color: colors.contentTertiary,
-          letterSpacing: 0.5,
+          letterSpacing: 1.0,
         ),
       ),
     );
   }
 
   Widget _buildDivider(SkladColors colors) {
-    return Divider(height: 1, thickness: 1, indent: 56, color: colors.divider);
+    return Divider(height: 1, thickness: 1, indent: 70, color: colors.divider);
   }
 
-  // ───────────────── BETTER SHEETS ─────────────────
+  // ───────────────── IMPROVED SHEETS ─────────────────
 
   void _showEditSheet(
     BuildContext context,
@@ -812,68 +729,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       builder: (ctx) => Container(
         decoration: BoxDecoration(
           color: colors.surfaceHigh,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(Dimens.radiusXl),
-          ), // 24
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         ),
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + Dimens.gapXl, // 24
-          left: Dimens.gapXl, // 24
-          right: Dimens.gapXl, // 24
-          top: Dimens.gapM, // 12
+        padding: EdgeInsets.fromLTRB(
+          24,
+          16,
+          24,
+          MediaQuery.of(ctx).viewInsets.bottom + 24,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Drag Handle
             Center(
               child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: Dimens.gapXl), // 24
+                width: 48,
+                height: 5,
                 decoration: BoxDecoration(
-                  color: colors.contentTertiary.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
+                  color: colors.contentTertiary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
             ),
+            const SizedBox(height: 32),
 
-            Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: colors.accentAction.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.edit_note_rounded,
-                    color: colors.accentAction,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(height: Dimens.gapL), // 16
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: colors.contentPrimary,
-                  ),
-                ),
-                const SizedBox(height: Dimens.gapS), // 8
-                Text(
-                  "Обновите информацию ниже",
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: colors.contentSecondary,
-                  ),
-                ),
-              ],
+            Text(
+              title,
+              style: GoogleFonts.outfit(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                color: colors.contentPrimary,
+              ),
+              textAlign: TextAlign.center,
             ),
-
+            const SizedBox(height: 8),
+            Text(
+              "Введите новые данные для обновления",
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: colors.contentSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 32),
 
             TextField(
@@ -881,10 +779,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               autofocus: true,
               style: GoogleFonts.inter(
                 fontSize: 16,
-                color: colors.contentPrimary,
                 fontWeight: FontWeight.w500,
+                color: colors.contentPrimary,
               ),
-              textAlign: TextAlign.center,
               keyboardType: isEmail
                   ? TextInputType.emailAddress
                   : TextInputType.text,
@@ -892,43 +789,47 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               decoration: InputDecoration(
                 filled: true,
                 fillColor: colors.surfaceContainer,
-                hintText: "Введите значение",
+                hintText: "Введите значение...",
+                hintStyle: TextStyle(color: colors.contentTertiary),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 20,
+                ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(Dimens.radiusL), // 16
+                  borderRadius: BorderRadius.circular(16),
                   borderSide: BorderSide.none,
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(Dimens.radiusL), // 16
+                  borderRadius: BorderRadius.circular(16),
                   borderSide: BorderSide(color: colors.accentAction, width: 2),
                 ),
               ),
             ),
             const SizedBox(height: 32),
 
-            // SIDE BY SIDE BUTTONS with Outlined Cancel
             Row(
               children: [
                 Expanded(
-                  child: TextButton(
+                  // [STYLE UPDATE] Thin stroke cancel button
+                  child: OutlinedButton(
                     onPressed: () => Navigator.pop(ctx),
-                    style: TextButton.styleFrom(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: colors.divider, width: 0.5),
                       padding: const EdgeInsets.symmetric(vertical: 18),
-                      foregroundColor: colors.contentSecondary,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(
-                          color: colors.divider,
-                          width: 1,
-                        ), // Thin outline
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                     child: Text(
                       'Отмена',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                      style: GoogleFonts.inter(
+                        color: colors.contentSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: Dimens.gapM), // 12
+                const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
@@ -936,17 +837,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       Navigator.pop(ctx);
                     },
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      elevation: 0,
                       backgroundColor: colors.accentAction,
                       foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                     child: Text(
                       'Сохранить',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -958,6 +859,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  // [STYLE UPDATE] Modernized Password Reset Sheet
   void _showPasswordResetSheet(
     BuildContext context,
     String email,
@@ -970,26 +872,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       builder: (ctx) => Container(
         decoration: BoxDecoration(
           color: colors.surfaceHigh,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(Dimens.radiusXl),
-          ), // 24
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         ),
-        padding: const EdgeInsets.all(Dimens.gapXl), // 24
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: Dimens.gapXl), // 24
-              decoration: BoxDecoration(
-                color: colors.contentTertiary.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
+            Center(
+              child: Container(
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: colors.contentTertiary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
-
+            const SizedBox(height: 32),
             Container(
-              padding: const EdgeInsets.all(16),
+              width: 64,
+              height: 64,
               decoration: BoxDecoration(
                 color: colors.warning.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
@@ -1000,66 +903,60 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 color: colors.warning,
               ),
             ),
-
-            const SizedBox(height: Dimens.gapL), // 16
+            const SizedBox(height: 24),
             Text(
               "Сброс пароля",
-              style: GoogleFonts.inter(
-                fontSize: 20,
+              style: GoogleFonts.outfit(
+                fontSize: 24,
                 fontWeight: FontWeight.w700,
                 color: colors.contentPrimary,
               ),
-            ),
-            const SizedBox(height: Dimens.gapM), // 12
-            RichText(
               textAlign: TextAlign.center,
-              text: TextSpan(
-                style: GoogleFonts.inter(
-                  color: colors.contentSecondary,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-                children: [
-                  const TextSpan(
-                    text: "Мы отправим ссылку для сброса пароля на:\n",
-                  ),
-                  TextSpan(
-                    text: email,
-                    style: TextStyle(
-                      color: colors.contentPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
             ),
-
+            const SizedBox(height: 12),
+            Text(
+              "Мы отправим ссылку для создания нового пароля на ваш email:",
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: colors.contentSecondary,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              email,
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: colors.contentPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 32),
-
-            // SIDE BY SIDE BUTTONS with Outlined Cancel
+            // [STYLE UPDATE] Changed to Row layout with thin-stroke Cancel
             Row(
               children: [
                 Expanded(
-                  child: TextButton(
+                  child: OutlinedButton(
                     onPressed: () => Navigator.pop(ctx),
-                    style: TextButton.styleFrom(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: colors.divider, width: 0.5),
                       padding: const EdgeInsets.symmetric(vertical: 18),
-                      foregroundColor: colors.contentSecondary,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(
-                          color: colors.divider,
-                          width: 1,
-                        ), // Thin outline
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                     child: Text(
                       'Отмена',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                      style: GoogleFonts.inter(
+                        color: colors.contentSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: Dimens.gapM), // 12
+                const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
@@ -1067,36 +964,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         await FirebaseAuth.instance.sendPasswordResetEmail(
                           email: email,
                         );
-
-                        // Check if the bottom sheet context is still valid
                         if (!ctx.mounted) return;
-
-                        // Use the specific context (ctx) to pop the sheet
                         Navigator.pop(ctx);
-
                         _showSovereignNotification(
-                          'Письмо со сбросом пароля отправлено',
-                          Icons.mail_outline_rounded,
-                          colors.accentAction,
+                          'Письмо отправлено на почту',
+                          Icons.mark_email_read_rounded,
+                          colors.success,
                           colors,
                         );
                       } catch (_) {
-                        // Check ctx.mounted here as well
                         if (ctx.mounted) Navigator.pop(ctx);
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      elevation: 0,
                       backgroundColor: colors.accentAction,
                       foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                     child: Text(
                       'Отправить',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -1126,7 +1017,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     setState(() => _isUploading = true);
 
     try {
-      // FIX: Use the static method from the class
       final fileToUpload = await UploadHelper.prepareUploadFile(
         processed,
         image,

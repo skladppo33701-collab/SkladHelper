@@ -15,7 +15,7 @@ class DialogUtils {
     VoidCallback? onSecondaryTap,
     bool showWarning = false,
     String? warningText,
-    Color? accentColorOverride, // FIXED: Added this parameter
+    Color? accentColorOverride,
   }) async {
     final proColors = Theme.of(context).extension<SkladColors>()!;
     final theme = Theme.of(context);
@@ -33,7 +33,6 @@ class DialogUtils {
           side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         titlePadding: EdgeInsets.zero,
-        // FIXED: Using public method with named parameters
         title: buildUnifiedHeader(
           icon: icon,
           title: title,
@@ -47,7 +46,6 @@ class DialogUtils {
             content,
             if (showWarning) ...[
               const SizedBox(height: 20),
-              // FIXED: Using the internal helper
               _buildWarningBox(proColors, textTheme, warningText),
             ],
           ],
@@ -56,7 +54,6 @@ class DialogUtils {
         actions: [
           Column(
             children: [
-              // FIXED: Using public method with named parameters
               buildDialogAction(
                 context: context,
                 text: primaryButtonText,
@@ -83,7 +80,6 @@ class DialogUtils {
   }
 
   // --- PUBLIC HELPER 1: HEADER ---
-  // Renamed from _buildUnifiedHeader to buildUnifiedHeader
   static Widget buildUnifiedHeader({
     required IconData icon,
     required String title,
@@ -115,7 +111,6 @@ class DialogUtils {
   }
 
   // --- PUBLIC HELPER 2: ACTION BUTTON ---
-  // Renamed from _buildDialogAction to buildDialogAction
   static Widget buildDialogAction({
     required BuildContext context,
     required String text,
@@ -143,13 +138,15 @@ class DialogUtils {
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold),
               ),
             )
+          // [STYLE UPDATE] Thin stroke for cancel buttons
           : OutlinedButton(
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white70,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
-                side: const BorderSide(color: Colors.white12),
+                // Thin stroke as requested
+                side: const BorderSide(color: Colors.white12, width: 0.5),
               ),
               onPressed: onTap,
               child: Text(text, style: GoogleFonts.inter()),

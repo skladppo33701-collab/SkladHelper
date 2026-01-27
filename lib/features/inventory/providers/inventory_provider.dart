@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/inventory_item.dart';
+import 'package:sklad_helper_33701/features/inventory/services/brand_classifier.dart';
 
 class InventoryState {
   final bool isLoading;
@@ -27,6 +28,9 @@ class InventoryState {
 }
 
 class InventoryNotifier extends Notifier<InventoryState> {
+  // Inject the classifier
+  final _classifier = BrandClassifier();
+
   @override
   InventoryState build() => InventoryState();
 
@@ -35,9 +39,19 @@ class InventoryNotifier extends Notifier<InventoryState> {
       state = state.copyWith(filteredItems: state.allItems);
       return;
     }
-    final filtered = state.allItems
-        .where((item) => item.matches(query))
+
+    // Map items to their relevance score
+    final List<MapEntry<InventoryItem, double>> scoredItems = state.allItems
+        .map((item) => MapEntry(item, item.calculateRelevance(query)))
+        .where((entry) => entry.value > 0) // Filter out irrelevant items
         .toList();
+
+    // Sort by score descending (highest relevance first)
+    scoredItems.sort((a, b) => b.value.compareTo(a.value));
+
+    // Extract just the items
+    final filtered = scoredItems.map((entry) => entry.key).toList();
+
     state = state.copyWith(filteredItems: filtered);
   }
 
@@ -97,15 +111,18 @@ class InventoryNotifier extends Notifier<InventoryState> {
           double qty = double.tryParse(qtyStr) ?? 0;
 
           if (qty > 0) {
+            // AGENTIC UPGRADE: Use the classifier to determine brand and category
+            final classification = _classifier.classify(name);
+
             newItems.add(
               InventoryItem(
-                id: sku, // FIX: Added required id
+                id: sku,
                 sku: sku,
                 name: name,
                 quantity: qty,
-                brand: _extractBrand(name),
+                brand: classification.brand,
                 warehouse: "Основной склад",
-                category: "Общее",
+                category: classification.category, // Dynamic category!
               ),
             );
           }
@@ -122,17 +139,7 @@ class InventoryNotifier extends Notifier<InventoryState> {
     }
   }
 
-  String _extractBrand(String name) {
-    final parts = name.split(' ');
-    if (parts.length > 2 && parts[0].toLowerCase() == 'холодильник') {
-      return parts[1];
-    }
-    if (parts.length > 2 && parts[0].toLowerCase() == 'стиральная') {
-      return parts[2];
-    }
-    if (parts.length > 1) return parts[0];
-    return "N/A";
-  }
+  // NOTE: The old _extractBrand method has been removed in favor of BrandClassifier
 }
 
 final inventoryProvider = NotifierProvider<InventoryNotifier, InventoryState>(
