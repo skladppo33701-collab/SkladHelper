@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 // Page Imports
-import 'package:sklad_helper_33701/features/inventory/presentation/bot_page.dart';
+import 'package:sklad_helper_33701/features/bot/bot/presentation/bot_page.dart';
 import 'package:sklad_helper_33701/features/inventory/presentation/inventory_page.dart';
 import 'package:sklad_helper_33701/features/inventory/presentation/planner_page.dart';
 import 'package:sklad_helper_33701/features/settings/presentation/settings_page.dart';

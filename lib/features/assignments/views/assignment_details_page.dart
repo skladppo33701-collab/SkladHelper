@@ -4,11 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
-import 'package:sklad_helper_33701/core/theme.dart';
-import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
-import 'package:sklad_helper_33701/features/assignments/models/assignment_model.dart';
-import 'package:sklad_helper_33701/features/assignments/providers/assignment_provider.dart';
-import 'package:sklad_helper_33701/features/inventory/presentation/scanner_page.dart';
+// Core
+import '../../../../core/theme.dart';
+import '../../../../core/constants/dimens.dart';
+
+// Features
+import '../../auth/providers/auth_provider.dart';
+import '../models/assignment_model.dart';
+import '../providers/assignment_provider.dart';
+import '../../inventory/presentation/scanner_page.dart';
 
 class AssignmentDetailsPage extends ConsumerWidget {
   final String assignmentId;
@@ -17,7 +21,8 @@ class AssignmentDetailsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = Theme.of(context).extension<SkladColors>()!;
+    // [PROTOCOL-VISUAL-1] Use extension for theme
+    final colors = context.colors;
 
     // Получаем конкретное задание из состояния
     final assignment = ref
@@ -27,9 +32,14 @@ class AssignmentDetailsPage extends ConsumerWidget {
           orElse: () => Assignment(
             id: '',
             name: 'Не найдено',
-            type: '',
+            // Corrected: Provide required 'type' and remove undefined parameters
+            type: 'unknown',
+            // description: '', // Removed undefined parameter
+            status: AssignmentStatus
+                .created, // Corrected: Use 'created' instead of 'pending' if 'pending' doesn't exist
             createdAt: DateTime.now(),
             items: [],
+            // createdBy: 'system', // Removed undefined parameter
           ),
         );
 
@@ -79,7 +89,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
                   color: colors.contentPrimary,
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(Dimens.radiusL), // 16
                 ),
                 color: colors.surfaceHigh,
                 offset: const Offset(0, 40),
@@ -102,7 +112,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
                           color: colors.success,
                           size: 20,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: Dimens.gapM), // 12
                         const Text('Завершить'),
                       ],
                     ),
@@ -116,7 +126,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
                           color: colors.accentAction,
                           size: 20,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: Dimens.gapM), // 12
                         const Text('Информация'),
                       ],
                     ),
@@ -127,13 +137,18 @@ class AssignmentDetailsPage extends ConsumerWidget {
             flexibleSpace: FlexibleSpaceBar(
               centerTitle: false,
               titlePadding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 16,
+                horizontal: Dimens.gapXl, // 24
+                vertical: Dimens.gapL, // 16
               ),
               background: Container(
-                padding: const EdgeInsets.fromLTRB(24, 60, 24, 20),
-                color:
-                    colors.surfaceContainer, // Мягкий фон, соответствующий теме
+                // [PROTOCOL-VISUAL-1] Use Dimens
+                padding: const EdgeInsets.fromLTRB(
+                  Dimens.gapXl,
+                  60,
+                  Dimens.gapXl,
+                  Dimens.module,
+                ),
+                color: colors.surfaceContainer, // Мягкий фон
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -143,7 +158,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           _buildStatusBadge(assignment.status, colors),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: Dimens.gapS), // 8
                           Text(
                             assignment.name,
                             style: GoogleFonts.inter(
@@ -158,7 +173,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: Dimens.gapL), // 16
                     // Аватар создателя
                     Container(
                       padding: const EdgeInsets.all(3),
@@ -194,7 +209,12 @@ class AssignmentDetailsPage extends ConsumerWidget {
           // 2. PROGRESS SECTION
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+              padding: const EdgeInsets.fromLTRB(
+                Dimens.gapXl, // 24
+                Dimens.gapL, // 16
+                Dimens.gapXl, // 24
+                0,
+              ),
               child: _buildProgressSection(
                 progress,
                 scannedItems,
@@ -206,7 +226,12 @@ class AssignmentDetailsPage extends ConsumerWidget {
 
           // 3. ITEMS LIST HEADER
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+            padding: const EdgeInsets.fromLTRB(
+              Dimens.gapXl, // 24
+              Dimens.module, // 20
+              Dimens.gapXl, // 24
+              Dimens.gapS, // 8
+            ),
             sliver: SliverToBoxAdapter(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -241,7 +266,9 @@ class AssignmentDetailsPage extends ConsumerWidget {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(
+                horizontal: Dimens.gapXl,
+              ), // 24
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final item = assignment.items[index];
@@ -296,10 +323,10 @@ class AssignmentDetailsPage extends ConsumerWidget {
     SkladColors colors,
   ) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(Dimens.paddingCard), // 16
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Dimens.module), // 20
         border: Border.all(color: colors.divider),
       ),
       child: Column(
@@ -370,7 +397,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
             foregroundColor: Colors.white,
             icon: Icons.refresh_rounded,
             borderRadius: const BorderRadius.horizontal(
-              right: Radius.circular(16),
+              right: Radius.circular(Dimens.radiusL), // 16
             ),
           ),
         ],
@@ -380,7 +407,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
         child: Container(
           decoration: BoxDecoration(
             color: colors.surfaceHigh,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Dimens.radiusL), // 16
             border: Border.all(
               color: isDone
                   ? colors.success.withValues(alpha: 0.3)
@@ -389,7 +416,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
             ),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Dimens.radiusL),
             child: IntrinsicHeight(
               child: Row(
                 children: [
@@ -400,8 +427,8 @@ class AssignmentDetailsPage extends ConsumerWidget {
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                        horizontal: Dimens.gapM, // 12
+                        vertical: Dimens.gapS, // 8
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -442,6 +469,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
                                 ),
                                 child: Text(
                                   item.code,
+                                  // Corrected: Use 'jetBrainsMono' (case-sensitive)
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 10,
                                     color: colors.contentSecondary,
@@ -564,7 +592,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
           color: colors.surfaceHigh,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Dimens.gapXl), // 24
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -579,7 +607,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: Dimens.gapXl), // 24
             Text(
               "Сведения о заказе",
               style: GoogleFonts.inter(
@@ -588,7 +616,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
                 color: colors.contentPrimary,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: Dimens.module), // 20
             // Используем динамические данные из модели с нейтральными заглушками
             _buildInfoRow(
               "Документ основание",
@@ -597,7 +625,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
             ),
             _buildInfoRow("Отправитель", ass.sender ?? "Не указано", colors),
             _buildInfoRow("Получатель", ass.receiver ?? "Не указано", colors),
-            const SizedBox(height: 16),
+            const SizedBox(height: Dimens.gapL), // 16
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -606,7 +634,7 @@ class AssignmentDetailsPage extends ConsumerWidget {
                   backgroundColor: colors.accentAction,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(Dimens.radiusM), // 12
                   ),
                   elevation: 0,
                 ),
@@ -672,7 +700,9 @@ class AssignmentDetailsPage extends ConsumerWidget {
         ),
       ),
       elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Dimens.radiusL), // 16
+      ),
     );
   }
 

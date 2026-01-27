@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
+import 'package:sklad_helper_33701/core/constants/dimens.dart'; // [PROTOCOL-VISUAL-1]
 
 class PickUpPage extends ConsumerStatefulWidget {
   const PickUpPage({super.key});
@@ -27,7 +28,13 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
           // Executive Header
           SliverToBoxAdapter(
             child: Container(
-              padding: const EdgeInsets.fromLTRB(24, 60, 24, 20),
+              // [PROTOCOL-VISUAL-1] Tokenized Padding
+              padding: const EdgeInsets.fromLTRB(
+                Dimens.gapXl,
+                60,
+                Dimens.gapXl,
+                Dimens.module,
+              ),
               color: colors.surfaceContainer,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,7 +66,7 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
                       _buildScanButton(colors),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: Dimens.gapXl),
                   _buildSearchBar(colors),
                 ],
               ),
@@ -68,30 +75,44 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
 
           // Statistics Overview
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+            padding: const EdgeInsets.fromLTRB(
+              Dimens.gapXl,
+              Dimens.module,
+              Dimens.gapXl,
+              0,
+            ),
             sliver: SliverToBoxAdapter(
-              child: Row(
-                children: [
-                  _buildStatTile("Ожидают", "12", colors.warning, colors),
-                  const SizedBox(width: 12),
-                  _buildStatTile("Готовы", "08", colors.success, colors),
-                  const SizedBox(width: 12),
-                  _buildStatTile("Задержка", "02", colors.error, colors),
-                ],
+              child: IntrinsicHeight(
+                // [PROTOCOL-VISUAL-2] Intrinsic height ensures tiles match size
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildStatTile("Ожидают", "12", colors.warning, colors),
+                    const SizedBox(width: Dimens.gapM),
+                    _buildStatTile("Готовы", "08", colors.success, colors),
+                    const SizedBox(width: Dimens.gapM),
+                    _buildStatTile("Задержка", "02", colors.error, colors),
+                  ],
+                ),
               ),
             ),
           ),
 
           // Filter Tabs
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+            padding: const EdgeInsets.fromLTRB(
+              Dimens.gapXl,
+              Dimens.gapXl,
+              Dimens.gapXl,
+              Dimens.gapM,
+            ),
             sliver: SliverToBoxAdapter(
               child: Row(
                 children: [
                   _buildFilterChip(0, "Все заказы"),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: Dimens.gapS),
                   _buildFilterChip(1, "Сборка"),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: Dimens.gapS),
                   _buildFilterChip(2, "Выдача"),
                 ],
               ),
@@ -116,7 +137,7 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
               }
 
               return SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(horizontal: Dimens.gapXl),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) => _buildPickupCard(docs[index], colors),
@@ -141,14 +162,15 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
   ) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Dimens.gapL),
         decoration: BoxDecoration(
           color: colors.surfaceHigh,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Dimens.radiusL),
           border: Border.all(color: colors.divider),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               value,
@@ -178,10 +200,13 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
       onTap: () => setState(() => _selectedFilter = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Dimens.gapL,
+          vertical: Dimens.gapS,
+        ),
         decoration: BoxDecoration(
           color: isSelected ? colors.accentAction : colors.surfaceHigh,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Dimens.radiusM),
           border: Border.all(
             color: isSelected ? colors.accentAction : colors.divider,
           ),
@@ -201,11 +226,11 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
   Widget _buildPickupCard(DocumentSnapshot doc, SkladColors colors) {
     final data = doc.data() as Map<String, dynamic>;
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: Dimens.gapM),
+      padding: const EdgeInsets.all(Dimens.gapL),
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Dimens.module),
         border: Border.all(color: colors.divider),
       ),
       child: Column(
@@ -232,7 +257,7 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
               _buildStatusBadge(data['status'] ?? 'pending', colors),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Dimens.gapL),
           Row(
             children: [
               Icon(
@@ -240,7 +265,7 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
                 size: 14,
                 color: colors.contentTertiary,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: Dimens.gapXs),
               Text(
                 "Дедлайн: Сегодня, 18:00",
                 style: GoogleFonts.inter(
@@ -256,10 +281,10 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(Dimens.radiusM),
                   ),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
+                    horizontal: Dimens.gapL,
                     vertical: 0,
                   ),
                   minimumSize: const Size(0, 32),
@@ -287,7 +312,7 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(Dimens.radiusS),
       ),
       child: Text(
         label,
@@ -304,7 +329,7 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
     return Container(
       decoration: BoxDecoration(
         color: colors.accentAction,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Dimens.radiusM),
       ),
       child: IconButton(
         onPressed: () {},
@@ -323,7 +348,7 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
         filled: true,
         fillColor: colors.surfaceLow,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Dimens.radiusL),
           borderSide: BorderSide.none,
         ),
       ),
@@ -340,7 +365,7 @@ class _PickUpPageState extends ConsumerState<PickUpPage> {
             size: 64,
             color: colors.contentTertiary.withValues(alpha: 0.3),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Dimens.gapL),
           Text(
             "Нет активных отгрузок",
             style: GoogleFonts.inter(

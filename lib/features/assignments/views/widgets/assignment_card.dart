@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:sklad_helper_33701/core/theme.dart';
+import 'package:sklad_helper_33701/core/constants/dimens.dart'; // [PROTOCOL-VISUAL-1]
 import 'package:sklad_helper_33701/features/assignments/models/assignment_model.dart';
 
 class AssignmentCard extends ConsumerWidget {
@@ -34,10 +36,10 @@ class AssignmentCard extends ConsumerWidget {
     final isDone = assignment.status == AssignmentStatus.completed;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: Dimens.gapM),
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Dimens.radiusL),
         boxShadow: [
           if (!isDark)
             BoxShadow(
@@ -56,9 +58,9 @@ class AssignmentCard extends ConsumerWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Dimens.radiusL),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(Dimens.paddingCard),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -74,11 +76,11 @@ class AssignmentCard extends ConsumerWidget {
                         color: isDone
                             ? colors.success.withValues(alpha: 0.1)
                             : colors.accentAction.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(Dimens.radiusS),
                       ),
                       child: Text(
                         assignment.type.toUpperCase(),
-                        style: TextStyle(
+                        style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           color: isDone ? colors.success : colors.accentAction,
@@ -93,12 +95,12 @@ class AssignmentCard extends ConsumerWidget {
                           size: 14,
                           color: colors.neutralGray,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: Dimens.gapXs),
                         Text(
                           DateFormat(
                             'dd MMM, HH:mm',
                           ).format(assignment.createdAt),
-                          style: TextStyle(
+                          style: GoogleFonts.inter(
                             fontSize: 12,
                             color: colors.neutralGray,
                           ),
@@ -108,26 +110,27 @@ class AssignmentCard extends ConsumerWidget {
                   ],
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: Dimens.gapM),
 
+                // [PROTOCOL-VISUAL-2] Reflow Hardening: Text scaling support
                 Text(
                   assignment.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: GoogleFonts.inter(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : const Color(0xFF1E293B),
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: Dimens.gapL),
 
                 Row(
                   children: [
                     Expanded(
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(Dimens.radiusS),
                         child: LinearProgressIndicator(
                           value: progress,
                           minHeight: 6,
@@ -140,10 +143,10 @@ class AssignmentCard extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: Dimens.gapM),
                     Text(
                       "${(progress * 100).toInt()}%",
-                      style: TextStyle(
+                      style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                         color: isDone ? colors.success : colors.accentAction,

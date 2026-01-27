@@ -13,22 +13,21 @@ import 'package:sklad_helper_33701/core/providers/theme_provider.dart';
 import 'package:sklad_helper_33701/core/providers/navigation_provider.dart';
 import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
 import 'package:sklad_helper_33701/features/auth/views/login_screen.dart';
+import 'package:sklad_helper_33701/features/auth/models/user_model.dart';
 
 // Page Imports
 import 'package:sklad_helper_33701/features/inventory/presentation/inventory_page.dart';
 import 'package:sklad_helper_33701/features/inventory/presentation/planner_page.dart';
-import 'package:sklad_helper_33701/features/inventory/presentation/bot_page.dart';
+import 'package:sklad_helper_33701/features/bot/bot/presentation/bot_page.dart';
 import 'package:sklad_helper_33701/features/pickup/presentation/pickup_page.dart';
 import 'package:sklad_helper_33701/features/settings/presentation/settings_page.dart';
+// [Role Routing] Import Loader Dashboard
+import 'package:sklad_helper_33701/features/dashboard/views/loader_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize date formatting for the Russian locale used in the app
   await initializeDateFormatting('ru', null);
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
   runApp(const ProviderScope(child: SkladApp()));
 }
 
@@ -50,14 +49,12 @@ class SkladApp extends ConsumerWidget {
       darkTheme: SkladTheme.darkTheme,
       themeMode: themeMode,
       builder: (context, child) {
-        // Dynamic System UI Overlay based on the current theme
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle(
             statusBarColor: Colors.transparent,
             statusBarIconBrightness: isDark
                 ? Brightness.light
                 : Brightness.dark,
-            // FIX 1: Set solid color to remove gray bar
             systemNavigationBarColor: isDark
                 ? const Color(0xFF0F172A)
                 : Colors.white,
@@ -79,14 +76,36 @@ class AuthWrapper extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // 1. Check Auth Status (Logged in or not)
     final authState = ref.watch(authStateProvider);
 
     return authState.when(
-      data: (user) =>
-          user != null ? const RootNavigationShell() : const LoginScreen(),
+      data: (user) {
+        if (user == null) return const LoginScreen();
+
+        // 2. If logged in, check User Role from Firestore
+        final userRoleAsync = ref.watch(userRoleProvider);
+
+        return userRoleAsync.when(
+          data: (appUser) {
+            if (appUser == null) return const LoginScreen(); // Safety fallback
+
+            // [ROLE ROUTING LOGIC]
+            if (appUser.role == UserRole.loader) {
+              return const LoaderDashboard();
+            } else {
+              // Default to Manager/Admin Shell
+              return const RootNavigationShell();
+            }
+          },
+          loading: () =>
+              const Scaffold(body: Center(child: CircularProgressIndicator())),
+          error: (_, _) => const LoginScreen(),
+        );
+      },
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, stack) => const LoginScreen(),
+      error: (_, _) => const LoginScreen(),
     );
   }
 }
@@ -100,11 +119,11 @@ class RootNavigationShell extends ConsumerWidget {
     final colors = Theme.of(context).extension<SkladColors>()!;
 
     final List<Widget> pages = [
-      const InventoryPage(), // 0: Resources
-      const BotPage(), // 1: AI Telegram Bot
-      const PickUpPage(), // 2: Logistics
-      const PlannerPage(), // 3: Strategy
-      const SettingsPage(), // 4: Profile
+      const InventoryPage(),
+      const BotPage(),
+      const PickUpPage(),
+      const PlannerPage(),
+      const SettingsPage(),
     ];
 
     return Scaffold(
@@ -133,8 +152,6 @@ class _SovereignDock extends StatelessWidget {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Padding(
-      // Padding ensures the dock stays "floating" above the system navigation area
-      // but the Scaffold's body will now respect this height.
       padding: EdgeInsets.fromLTRB(
         16,
         0,
@@ -233,7 +250,6 @@ class _DockItem extends StatelessWidget {
     final isActive = currentIndex == index;
     final colors = Theme.of(context).extension<SkladColors>()!;
 
-    // FIX 2: Expanded is now the PARENT of GestureDetector
     return Expanded(
       child: GestureDetector(
         onTap: () => onTap(index),

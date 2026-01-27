@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'constants/dimens.dart';
 
 // -----------------------------------------------------------------------------
 // 1. PALETTE DEFINITION (Private)
@@ -42,7 +44,76 @@ abstract class _Palette {
 }
 
 // -----------------------------------------------------------------------------
-// 2. THEME EXTENSION (Public)
+// 2. SPACINGS EXTENSION (Restored for [PROTOCOL-VISUAL-1])
+// -----------------------------------------------------------------------------
+@immutable
+class SkladSpacings extends ThemeExtension<SkladSpacings> {
+  final double xs;
+  final double s;
+  final double m;
+  final double l;
+  final double module;
+  final double xl;
+  final double xxl;
+
+  const SkladSpacings({
+    required this.xs,
+    required this.s,
+    required this.m,
+    required this.l,
+    required this.module,
+    required this.xl,
+    required this.xxl,
+  });
+
+  factory SkladSpacings.regular() => const SkladSpacings(
+    xs: Dimens.gapXs,
+    s: Dimens.gapS,
+    m: Dimens.gapM,
+    l: Dimens.gapL,
+    module: Dimens.module,
+    xl: Dimens.gapXl,
+    xxl: Dimens.gap2xl,
+  );
+
+  @override
+  SkladSpacings copyWith({
+    double? xs,
+    double? s,
+    double? m,
+    double? l,
+    double? module,
+    double? xl,
+    double? xxl,
+  }) {
+    return SkladSpacings(
+      xs: xs ?? this.xs,
+      s: s ?? this.s,
+      m: m ?? this.m,
+      l: l ?? this.l,
+      module: module ?? this.module,
+      xl: xl ?? this.xl,
+      xxl: xxl ?? this.xxl,
+    );
+  }
+
+  @override
+  SkladSpacings lerp(ThemeExtension<SkladSpacings>? other, double t) {
+    if (other is! SkladSpacings) return this;
+    return SkladSpacings(
+      xs: other.xs,
+      s: other.s,
+      m: other.m,
+      l: other.l,
+      module: other.module,
+      xl: other.xl,
+      xxl: other.xxl,
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 3. THEME EXTENSION (Public)
 // Compatible with existing code usage (colors.surfaceLow, etc.)
 // -----------------------------------------------------------------------------
 @immutable
@@ -81,6 +152,20 @@ class SkladColors extends ThemeExtension<SkladColors> {
     required this.warning,
     required this.error,
   });
+
+  // --- COMPATIBILITY LAYER (Fixes errors in other files) ---
+  // Maps old Sovereign/Legacy names to new Sklad names
+  Color get surface => surfaceHigh;
+  Color get surfaceSubtle => surfaceLow;
+  Color get border => divider;
+  Color get borderSubtle => divider.withValues(alpha: 0.5);
+  Color get textPrimary => contentPrimary;
+  Color get textSecondary => contentSecondary;
+  Color get textTertiary => contentTertiary;
+  Color get accent => accentAction;
+  Color get accentGlow => accentAction.withValues(alpha: 0.15);
+  Color get cardGlass => surfaceHigh.withValues(alpha: 0.9);
+  // ---------------------------------------------------------
 
   @override
   SkladColors copyWith({
@@ -142,7 +227,17 @@ class SkladColors extends ThemeExtension<SkladColors> {
 }
 
 // -----------------------------------------------------------------------------
-// 3. THEME FACTORY (Public)
+// 4. UTILS (Public)
+// -----------------------------------------------------------------------------
+extension SkladThemeUtils on BuildContext {
+  SkladColors get colors => Theme.of(this).extension<SkladColors>()!;
+  SkladSpacings get spacings => Theme.of(this).extension<SkladSpacings>()!;
+  ThemeData get theme => Theme.of(this);
+  TextTheme get typography => Theme.of(this).textTheme;
+}
+
+// -----------------------------------------------------------------------------
+// 5. THEME FACTORY (Public)
 // -----------------------------------------------------------------------------
 class SkladTheme {
   // --- LIGHT MODE ---
@@ -170,7 +265,10 @@ class SkladTheme {
       brightness: Brightness.light,
       scaffoldBackgroundColor: colors.surfaceLow,
       primaryColor: colors.accentAction,
-      extensions: [colors],
+      extensions: [
+        colors,
+        SkladSpacings.regular(), // [PROTOCOL-VISUAL-1] Spacings Injected
+      ],
 
       // Material 3 Mappings
       colorScheme: ColorScheme.light(
@@ -189,10 +287,9 @@ class SkladTheme {
         foregroundColor: colors.contentPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: colors.contentPrimary),
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
-
-      // Removed cardTheme to fix "CardThemeData" type error.
-      // Cards will default to 'surface' color defined in colorScheme above.
     );
   }
 
@@ -221,7 +318,10 @@ class SkladTheme {
       brightness: Brightness.dark,
       scaffoldBackgroundColor: colors.surfaceLow,
       primaryColor: colors.accentAction,
-      extensions: [colors],
+      extensions: [
+        colors,
+        SkladSpacings.regular(), // [PROTOCOL-VISUAL-1] Spacings Injected
+      ],
 
       // Material 3 Mappings
       colorScheme: ColorScheme.dark(
@@ -240,6 +340,8 @@ class SkladTheme {
         foregroundColor: colors.contentPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: colors.contentPrimary),
+        systemOverlayStyle: SystemUiOverlayStyle.light,
       ),
     );
   }

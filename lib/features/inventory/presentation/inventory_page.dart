@@ -6,12 +6,21 @@ import 'package:cross_file/cross_file.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:sklad_helper_33701/core/theme.dart';
-import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
-import 'package:sklad_helper_33701/features/assignments/models/assignment_model.dart';
-import 'package:sklad_helper_33701/features/assignments/providers/assignment_provider.dart';
-import 'package:sklad_helper_33701/features/assignments/services/assignment_parser.dart';
-import 'package:sklad_helper_33701/features/assignments/views/assignment_details_page.dart';
+// [PROTOCOL-VISUAL-1] Professional Icon Set
+import 'package:lucide_icons/lucide_icons.dart';
+
+// Core & Theme
+import '../../../../core/theme.dart';
+import '../../../../core/constants/dimens.dart';
+// If this import path is correct, UploadHelper should be visible.
+import '../../../../core/utils/upload/upload_helper.dart';
+
+// Features
+import '../../auth/providers/auth_provider.dart';
+import '../../assignments/models/assignment_model.dart';
+import '../../assignments/providers/assignment_provider.dart';
+import '../../assignments/services/assignment_parser.dart';
+import '../../assignments/views/assignment_details_page.dart';
 
 class InventoryPage extends ConsumerStatefulWidget {
   const InventoryPage({super.key});
@@ -38,7 +47,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
     Color accentColor,
   ) {
     if (!mounted) return;
-    final colors = Theme.of(context).extension<SkladColors>()!;
+    final colors = context.colors;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -47,10 +56,13 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         content: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Dimens.paddingCard,
+            vertical: Dimens.gapM,
+          ),
           decoration: BoxDecoration(
             color: colors.surfaceHigh.withValues(alpha: 0.98),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Dimens.radiusL),
             border: Border.all(color: accentColor.withValues(alpha: 0.2)),
             boxShadow: [
               BoxShadow(
@@ -63,14 +75,14 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(Dimens.gapS),
                 decoration: BoxDecoration(
                   color: accentColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: accentColor, size: 20),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: Dimens.gapM),
               Expanded(
                 child: Text(
                   message,
@@ -90,27 +102,41 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
 
   Future<void> _handleDroppedFiles(List<XFile> files) async {
     if (files.isEmpty) return;
-    final colors = Theme.of(context).extension<SkladColors>()!;
+    final colors = context.colors;
 
     setState(() => _isProcessingDrop = true);
     for (final file in files) {
       try {
         final bytes = await file.readAsBytes();
 
-        // Use the centralized parser service
-        final assignment = AssignmentParser.parseExcelBytes(bytes, file.name);
+        // [PROTOCOL-ARCH-2] Use Isolate for parsing to prevent UI freeze
+        final result = await AssignmentParser.parseExcelIsolate(
+          bytes,
+          file.name,
+        );
 
-        ref.read(assignmentsProvider.notifier).addAssignment(assignment);
-
-        _showSovereignNotification(
-          'Задание создано',
-          Icons.check_circle_rounded,
-          colors.success,
+        result.fold(
+          (failure) {
+            _showSovereignNotification(
+              failure.message,
+              LucideIcons.alertCircle,
+              colors.error,
+            );
+          },
+          (assignment) {
+            ref.read(assignmentsProvider.notifier).addAssignment(assignment);
+            _showSovereignNotification(
+              'Задание создано',
+              LucideIcons.checkCircle,
+              colors.success,
+            );
+          },
         );
       } catch (e) {
+        // Fallback catch for unexpected errors outside the Result pattern
         _showSovereignNotification(
-          'Ошибка разбора: $e',
-          Icons.error_outline_rounded,
+          'Системная ошибка: $e',
+          LucideIcons.alertCircle,
           colors.error,
         );
       }
@@ -118,9 +144,29 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
     if (mounted) setState(() => _isProcessingDrop = false);
   }
 
+  Future<void> _pickFileFromDevice() async {
+    try {
+      // Using the helper to pick a single file (XFile)
+      final file = await UploadHelper.pickFile();
+      if (file != null) {
+        // Reuse the drop handler logic
+        await _handleDroppedFiles([file]);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSovereignNotification(
+          'Ошибка выбора файла: $e',
+          LucideIcons.alertCircle,
+          context.colors.error,
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<SkladColors>()!;
+    final colors = context.colors;
+    final spacings = context.spacings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final allAssignments = ref.watch(assignmentsProvider);
@@ -151,22 +197,54 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                    // [PROTOCOL-VISUAL-1] Standardized Padding
+                    padding: const EdgeInsets.fromLTRB(
+                      Dimens.gapXl,
+                      Dimens.gapXl,
+                      Dimens.gapXl,
+                      Dimens.gapS,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Задания',
-                          style: GoogleFonts.inter(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700,
-                            color: colors.contentPrimary,
-                            letterSpacing: -0.5,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Задания',
+                              style: GoogleFonts.inter(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                                color: colors.contentPrimary,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            // [Mobile Upload] Add Button for manual upload
+                            IconButton(
+                              onPressed: _pickFileFromDevice,
+                              icon: Icon(
+                                LucideIcons.uploadCloud,
+                                color: colors.accentAction,
+                                size: 24,
+                              ),
+                              style: IconButton.styleFrom(
+                                backgroundColor: colors.accentAction.withValues(
+                                  alpha: 0.1,
+                                ),
+                                padding: const EdgeInsets.all(Dimens.gapS),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    Dimens.radiusM,
+                                  ),
+                                ),
+                              ),
+                              tooltip: 'Загрузить файл',
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 20),
-                        _buildStatsRow(allAssignments, colors),
-                        const SizedBox(height: 20),
+                        SizedBox(height: spacings.module), // 20.0
+                        _buildStatsRow(allAssignments, colors, spacings),
+                        SizedBox(height: spacings.module),
                         _buildSearchBar(colors),
                       ],
                     ),
@@ -184,10 +262,15 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
     );
   }
 
-  Widget _buildStatsRow(List<Assignment> all, SkladColors colors) {
-    return SizedBox(
-      height: 160,
+  Widget _buildStatsRow(
+    List<Assignment> all,
+    SkladColors colors,
+    SkladSpacings spacings,
+  ) {
+    // [PROTOCOL-VISUAL-2] Reflow Hardening: Replaced fixed height with IntrinsicHeight
+    return IntrinsicHeight(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             flex: 3,
@@ -198,38 +281,34 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                   .where((a) => a.status != AssignmentStatus.completed)
                   .length
                   .toString(),
-              icon: Icons.pending_actions_rounded,
+              icon: LucideIcons.timer,
               accent: colors.warning,
               isHero: true,
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: spacings.m), // 12.0
           Expanded(
             flex: 2,
             child: Column(
               children: [
-                Expanded(
-                  child: _buildBentoCard(
-                    colors: colors,
-                    title: 'Всего',
-                    value: all.length.toString(),
-                    icon: Icons.folder_rounded,
-                    accent: colors.contentSecondary,
-                    isSmall: true,
-                  ),
+                _buildBentoCard(
+                  colors: colors,
+                  title: 'Всего',
+                  value: all.length.toString(),
+                  icon: LucideIcons.folder,
+                  accent: colors.contentSecondary,
+                  isSmall: true,
                 ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: _buildBentoCard(
-                    colors: colors,
-                    title: 'Товаров',
-                    value: all
-                        .fold(0, (sum, a) => sum + a.items.length)
-                        .toString(),
-                    icon: Icons.inventory_2_rounded,
-                    accent: colors.accentAction,
-                    isSmall: true,
-                  ),
+                SizedBox(height: spacings.m),
+                _buildBentoCard(
+                  colors: colors,
+                  title: 'Товаров',
+                  value: all
+                      .fold(0, (sum, a) => sum + a.items.length)
+                      .toString(),
+                  icon: LucideIcons.package,
+                  accent: colors.accentAction,
+                  isSmall: true,
                 ),
               ],
             ),
@@ -241,10 +320,10 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
 
   Widget _buildSearchBar(SkladColors colors) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: Dimens.paddingCard),
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Dimens.radiusL),
         border: Border.all(color: colors.divider),
       ),
       child: TextField(
@@ -255,7 +334,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
           hintText: 'Поиск...',
           hintStyle: GoogleFonts.inter(color: colors.contentTertiary),
           icon: Icon(
-            Icons.search_rounded,
+            LucideIcons.search,
             color: colors.contentSecondary,
             size: 20,
           ),
@@ -273,14 +352,14 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
         child: Container(
           height: 56,
           color: colors.surfaceLow.withValues(alpha: 0.98),
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: Dimens.gapXl),
           alignment: Alignment.centerLeft,
           child: Row(
             children: [
               _buildFilterChip(colors, 'All', 'Все'),
-              const SizedBox(width: 8),
+              const SizedBox(width: Dimens.gapS),
               _buildFilterChip(colors, 'Active', 'В работе'),
-              const SizedBox(width: 8),
+              const SizedBox(width: Dimens.gapS),
               _buildFilterChip(colors, 'Completed', 'Завершенные'),
             ],
           ),
@@ -294,7 +373,12 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
     SkladColors colors,
   ) {
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 100),
+      padding: const EdgeInsets.fromLTRB(
+        Dimens.gapXl,
+        Dimens.gapS,
+        Dimens.gapXl,
+        100,
+      ),
       sliver: SliverToBoxAdapter(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
@@ -332,15 +416,15 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
               ref.read(assignmentsProvider.notifier).deleteAssignment(ass.id);
               _showSovereignNotification(
                 'Задание удалено',
-                Icons.delete_sweep_rounded,
+                LucideIcons.trash2,
                 colors.error,
               );
             },
             backgroundColor: colors.error,
             foregroundColor: Colors.white,
-            icon: Icons.delete_outline_rounded,
+            icon: LucideIcons.trash2,
             borderRadius: const BorderRadius.horizontal(
-              right: Radius.circular(20),
+              right: Radius.circular(Dimens.module),
             ),
           ),
         ],
@@ -354,102 +438,106 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
               builder: (c) => AssignmentDetailsPage(assignmentId: ass.id),
             ),
           ),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Dimens.module),
           child: Ink(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(Dimens.paddingCard),
             decoration: BoxDecoration(
               color: colors.surfaceHigh,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(Dimens.module),
               border: Border.all(color: colors.divider),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: isCompleted ? colors.success : colors.warning,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        ass.name,
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: colors.contentPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.inventory_2_outlined,
-                            size: 14,
-                            color: colors.contentTertiary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            "${ass.items.length} поз.",
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: colors.contentSecondary,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Icon(
-                            Icons.access_time_rounded,
-                            size: 14,
-                            color: colors.contentTertiary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            DateFormat('HH:mm').format(ass.createdAt),
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: colors.contentSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: colors.divider.withValues(alpha: 0.5),
+            child: IntrinsicHeight(
+              child: Row(
+                children: [
+                  Container(
+                    width: 4,
+                    // Remove fixed height to allow stretch
+                    decoration: BoxDecoration(
+                      color: isCompleted ? colors.success : colors.warning,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: colors.accentAction.withValues(alpha: 0.1),
-                    backgroundImage:
-                        (creatorPfp != null && creatorPfp.isNotEmpty)
-                        ? NetworkImage(creatorPfp)
-                        : null,
-                    child: (creatorPfp == null || creatorPfp.isEmpty)
-                        ? Text(
-                            "М",
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: colors.accentAction,
-                              fontWeight: FontWeight.w900,
+                  const SizedBox(width: Dimens.gapL),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          ass.name,
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: colors.contentPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              LucideIcons.package,
+                              size: 14,
+                              color: colors.contentTertiary,
                             ),
-                          )
-                        : null,
+                            const SizedBox(width: 4),
+                            Text(
+                              "${ass.items.length} поз.",
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: colors.contentSecondary,
+                              ),
+                            ),
+                            const SizedBox(width: Dimens.gapM),
+                            Icon(
+                              LucideIcons.clock,
+                              size: 14,
+                              color: colors.contentTertiary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              DateFormat('HH:mm').format(ass.createdAt),
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: colors.contentSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: colors.divider.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      radius: Dimens.module,
+                      backgroundColor: colors.accentAction.withValues(
+                        alpha: 0.1,
+                      ),
+                      backgroundImage:
+                          (creatorPfp != null && creatorPfp.isNotEmpty)
+                          ? NetworkImage(creatorPfp)
+                          : null,
+                      child: (creatorPfp == null || creatorPfp.isEmpty)
+                          ? Text(
+                              "М",
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colors.accentAction,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -466,12 +554,14 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
     bool isSmall = false,
     bool isHero = false,
   }) {
+    // [PROTOCOL-VISUAL-2]: Min height ensures touch targets are accessible
     return Container(
       width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 100),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Dimens.module),
         border: Border.all(color: colors.divider),
       ),
       child: isSmall
@@ -485,7 +575,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                   ),
                   child: Icon(icon, size: 18, color: accent),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: Dimens.gapM),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -563,7 +653,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? colors.accentAction : colors.surfaceHigh,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Dimens.radiusM),
           border: Border.all(
             color: isSelected ? colors.accentAction : colors.divider,
           ),
@@ -587,11 +677,11 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
         child: Column(
           children: [
             Icon(
-              Icons.cloud_off_rounded,
+              LucideIcons.cloudOff,
               size: 80,
               color: colors.contentTertiary.withValues(alpha: 0.5),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: Dimens.gapL),
             Text(
               'Нет заданий',
               style: GoogleFonts.inter(
@@ -620,12 +710,8 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.file_download_rounded,
-              size: 72,
-              color: colors.accentAction,
-            ),
-            const SizedBox(height: 16),
+            Icon(LucideIcons.download, size: 72, color: colors.accentAction),
+            const SizedBox(height: Dimens.gapL),
             Text(
               'Отпустите файл',
               style: GoogleFonts.inter(

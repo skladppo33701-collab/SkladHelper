@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // Added for ConsumerState
 import 'package:file_picker/file_picker.dart';
-import 'package:sklad_helper_33701/core/theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui';
+
+// Core & Theme
+import '../../../../core/theme.dart';
+// Corrected path to auth_provider
 import '../services/document_service.dart';
 
-class WebUploadPage extends StatefulWidget {
+class WebUploadPage extends ConsumerStatefulWidget {
+  // Changed to ConsumerStatefulWidget
   const WebUploadPage({super.key});
 
   @override
-  State<WebUploadPage> createState() => _WebUploadPageState();
+  ConsumerState<WebUploadPage> createState() => _WebUploadPageState();
 }
 
-class _WebUploadPageState extends State<WebUploadPage> {
+class _WebUploadPageState extends ConsumerState<WebUploadPage> {
+  // Changed to ConsumerState
   PlatformFile? _pickedFile;
   bool _isUploading = false;
   String _docType = 'auto';
@@ -46,6 +52,10 @@ class _WebUploadPageState extends State<WebUploadPage> {
 
   Future<void> _uploadAndProcess() async {
     if (_pickedFile == null || _pickedFile!.bytes == null) return;
+
+    // Optional: Check auth state before upload if required
+    // final user = ref.read(authProvider).value;
+    // if (user == null) { ... }
 
     setState(() => _isUploading = true);
 

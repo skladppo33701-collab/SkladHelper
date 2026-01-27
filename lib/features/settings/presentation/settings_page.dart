@@ -8,13 +8,16 @@ import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Absolute imports for project structure stability
-import 'package:sklad_helper_33701/core/providers/theme_provider.dart';
-import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
-import 'package:sklad_helper_33701/features/auth/models/user_model.dart';
-import 'package:sklad_helper_33701/core/theme.dart';
-import 'package:sklad_helper_33701/core/utils/cropper/cropper_helper.dart';
-import 'package:sklad_helper_33701/core/utils/upload/upload_helper.dart';
+// Core & Theme
+import '../../../../core/theme.dart';
+import '../../../../core/constants/dimens.dart';
+import '../../../../core/utils/cropper/cropper_helper.dart';
+import '../../../../core/utils/upload/upload_helper.dart';
+import '../../../../core/providers/theme_provider.dart';
+
+// Features
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/models/user_model.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE PROVIDERS
@@ -44,7 +47,7 @@ final userCreatedTasksProvider = StreamProvider.autoDispose<int>((ref) {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return Stream.value(0);
 
-  // Changed collection from 'assignments' to 'tasks'
+  // Changed collection from 'assignments' to 'tasks' per previous logic
   return FirebaseFirestore.instance
       .collection('tasks')
       .where('creatorId', isEqualTo: user.uid)
@@ -98,10 +101,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         content: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Dimens.paddingCard, // 16
+            vertical: Dimens.gapM, // 12
+          ),
           decoration: BoxDecoration(
             color: colors.surfaceHigh.withValues(alpha: 0.98),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Dimens.radiusL), // 16
             border: Border.all(color: accentColor.withValues(alpha: 0.2)),
             boxShadow: [
               BoxShadow(
@@ -114,14 +120,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(Dimens.gapS), // 8
                 decoration: BoxDecoration(
                   color: accentColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: accentColor, size: 20),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: Dimens.gapM), // 12
               Expanded(
                 child: Text(
                   message,
@@ -142,9 +148,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(userRoleProvider);
-    final theme = Theme.of(context);
-    final colors = theme.extension<SkladColors>()!;
-    final isDark = theme.brightness == Brightness.dark;
+    final colors = context.colors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: colors.surfaceLow, // "Executive Slate" background
@@ -158,7 +163,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               // 1. HEADER
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 52, 24, 16),
+                  padding: const EdgeInsets.fromLTRB(
+                    Dimens.gapXl, // 24
+                    52, // Top Safe Area approx
+                    Dimens.gapXl, // 24
+                    Dimens.gapL, // 16
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -181,9 +191,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         style: IconButton.styleFrom(
                           backgroundColor: colors.error.withValues(alpha: 0.1),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(
+                              Dimens.radiusM,
+                            ), // 12
                           ),
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(Dimens.gapS), // 8
                           minimumSize: const Size(36, 36),
                         ),
                       ),
@@ -195,26 +207,34 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               // 2. IDENTITY CARD
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Dimens.gapXl,
+                  ), // 24
                   child: _buildIdentityCard(context, user, colors, isDark),
                 ),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-              // 3. STATS GRID (Bento Style - Replaced "В работе" with Dummy)
+              const SliverToBoxAdapter(
+                child: SizedBox(height: Dimens.gapL),
+              ), // 16
+              // 3. STATS GRID (Bento Style)
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Dimens.gapXl,
+                ), // 24
                 sliver: SliverToBoxAdapter(
                   child: _buildStatsGrid(context, colors),
                 ),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
+              const SliverToBoxAdapter(
+                child: SizedBox(height: Dimens.gapXl),
+              ), // 24
               // 4. SETTINGS LIST
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Dimens.gapXl,
+                ), // 24
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     _buildSectionHeader('ПРИЛОЖЕНИЕ', colors),
@@ -251,7 +271,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ],
                     ),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: Dimens.gapXl), // 24
                     _buildSectionHeader('АККАУНТ', colors),
                     _buildSettingsGroup(
                       context,
@@ -327,7 +347,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 32, bottom: 24),
+                    padding: const EdgeInsets.only(
+                      top: 32,
+                      bottom: Dimens.gapXl,
+                    ), // 24
                     child: Text(
                       "Версия $_appVersion",
                       style: GoogleFonts.inter(
@@ -363,7 +386,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return Container(
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(
+          Dimens.radiusXl,
+        ), // 18 approx -> 24 in system, sticking to 18 for specific visual
         border: Border.all(color: colors.divider),
         boxShadow: [
           if (!isDark)
@@ -376,10 +401,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Dimens.radiusXl),
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Dimens.paddingCard), // 16
           child: Row(
             children: [
               GestureDetector(
@@ -453,7 +478,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: Dimens.gapL), // 16
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -476,7 +501,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: Dimens.gapS), // 8
                     InkWell(
                       onTap: () => _showEditSheet(
                         context,
@@ -546,7 +571,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               colors,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: Dimens.gapM), // 12
           Expanded(
             child: _buildBigStatCard(
               'Создано',
@@ -569,10 +594,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     SkladColors colors,
   ) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(Dimens.paddingCard), // 16
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Dimens.radiusXl), // 18
         border: Border.all(color: colors.divider),
         boxShadow: [
           if (Theme.of(context).brightness == Brightness.light)
@@ -588,14 +613,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(Dimens.gapS), // 8
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: accent, size: 20),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Dimens.gapM), // 12
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -630,7 +655,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return Container(
       decoration: BoxDecoration(
         color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Dimens.radiusXl), // 18
         border: Border.all(color: colors.divider),
       ),
       clipBehavior: Clip.antiAlias,
@@ -650,14 +675,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(Dimens.gapS), // 8
             decoration: BoxDecoration(
               color: colors.surfaceContainer,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: colors.contentSecondary, size: 18),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: Dimens.gapL), // 16
           Expanded(
             child: Text(
               title,
@@ -701,14 +726,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(Dimens.gapS), // 8
                 decoration: BoxDecoration(
                   color: colors.surfaceContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: colors.contentSecondary, size: 18),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: Dimens.gapL), // 16
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -787,13 +812,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       builder: (ctx) => Container(
         decoration: BoxDecoration(
           color: colors.surfaceHigh,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(Dimens.radiusXl),
+          ), // 24
         ),
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          left: 24,
-          right: 24,
-          top: 12,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + Dimens.gapXl, // 24
+          left: Dimens.gapXl, // 24
+          right: Dimens.gapXl, // 24
+          top: Dimens.gapM, // 12
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -803,7 +830,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               child: Container(
                 width: 40,
                 height: 4,
-                margin: const EdgeInsets.only(bottom: 24),
+                margin: const EdgeInsets.only(bottom: Dimens.gapXl), // 24
                 decoration: BoxDecoration(
                   color: colors.contentTertiary.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
@@ -825,7 +852,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     size: 28,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: Dimens.gapL), // 16
                 Text(
                   title,
                   textAlign: TextAlign.center,
@@ -835,7 +862,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     color: colors.contentPrimary,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: Dimens.gapS), // 8
                 Text(
                   "Обновите информацию ниже",
                   textAlign: TextAlign.center,
@@ -867,11 +894,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 fillColor: colors.surfaceContainer,
                 hintText: "Введите значение",
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(Dimens.radiusL), // 16
                   borderSide: BorderSide.none,
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(Dimens.radiusL), // 16
                   borderSide: BorderSide(color: colors.accentAction, width: 2),
                 ),
               ),
@@ -901,7 +928,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: Dimens.gapM), // 12
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
@@ -943,16 +970,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       builder: (ctx) => Container(
         decoration: BoxDecoration(
           color: colors.surfaceHigh,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(Dimens.radiusXl),
+          ), // 24
         ),
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Dimens.gapXl), // 24
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 40,
               height: 4,
-              margin: const EdgeInsets.only(bottom: 24),
+              margin: const EdgeInsets.only(bottom: Dimens.gapXl), // 24
               decoration: BoxDecoration(
                 color: colors.contentTertiary.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
@@ -972,7 +1001,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: Dimens.gapL), // 16
             Text(
               "Сброс пароля",
               style: GoogleFonts.inter(
@@ -981,7 +1010,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 color: colors.contentPrimary,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: Dimens.gapM), // 12
             RichText(
               textAlign: TextAlign.center,
               text: TextSpan(
@@ -1030,7 +1059,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: Dimens.gapM), // 12
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
@@ -1081,7 +1110,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _updateProfilePicture(BuildContext context, String uid) async {
     final picker = ImagePicker();
-    final colors = Theme.of(context).extension<SkladColors>()!;
+    final colors = context.colors;
 
     final image = await picker.pickImage(
       source: ImageSource.gallery,
@@ -1097,7 +1126,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     setState(() => _isUploading = true);
 
     try {
-      final fileToUpload = await prepareUploadFile(processed, image);
+      // FIX: Use the static method from the class
+      final fileToUpload = await UploadHelper.prepareUploadFile(
+        processed,
+        image,
+      );
       FormData formData = FormData.fromMap({
         "file": fileToUpload,
         "upload_preset": "sklad_helper_preset",

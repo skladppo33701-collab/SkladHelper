@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sklad_helper_33701/features/auth/providers/auth_provider.dart';
 import 'package:sklad_helper_33701/core/theme.dart';
+import 'package:sklad_helper_33701/core/constants/dimens.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,16 +139,16 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         content: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Dimens.paddingCard),
           decoration: BoxDecoration(
             color: colors.surfaceHigh,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Dimens.radiusL),
             border: Border.all(color: colors.divider),
           ),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 12),
+              Icon(icon, color: color, size: Dimens.module),
+              const SizedBox(width: Dimens.gapM),
               Expanded(
                 child: Text(
                   message,
@@ -179,6 +180,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
     final colors = Theme.of(context).extension<SkladColors>()!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isTodaySelected = DateUtils.isSameDay(_selectedDate, DateTime.now());
+    final textScaler = MediaQuery.textScalerOf(context);
 
     return Scaffold(
       backgroundColor: colors.surfaceLow,
@@ -187,7 +189,12 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
         slivers: [
           SliverToBoxAdapter(
             child: Container(
-              padding: const EdgeInsets.fromLTRB(24, 44, 24, 12),
+              padding: const EdgeInsets.fromLTRB(
+                Dimens.gapXl,
+                44,
+                Dimens.gapXl,
+                Dimens.gapM,
+              ),
               color: colors.surfaceContainer,
               child: Row(
                 children: [
@@ -263,18 +270,20 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                           icon: Icon(
                             Icons.history_rounded,
                             color: colors.accentAction,
-                            size: 20,
+                            size: Dimens.module,
                           ),
                           style: IconButton.styleFrom(
                             backgroundColor: colors.accentAction.withValues(
                               alpha: 0.1,
                             ),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(
+                                Dimens.radiusM,
+                              ),
                             ),
                           ),
                         ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: Dimens.gapS),
                       IconButton(
                         onPressed: () {
                           setState(() {
@@ -290,7 +299,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                         style: IconButton.styleFrom(
                           backgroundColor: colors.surfaceHigh,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(Dimens.radiusM),
                           ),
                         ),
                       ),
@@ -304,7 +313,8 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
           if (!_isSearchMode)
             SliverToBoxAdapter(
               child: Container(
-                height: 115,
+                // [PROTOCOL-VISUAL-2]: Scaled height for accessibility
+                height: textScaler.scale(115).clamp(115.0, 180.0),
                 color: colors.surfaceContainer,
                 child: ListView.builder(
                   controller: _dateScrollController,
@@ -318,7 +328,8 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                       onTap: () => setState(() => _selectedDate = date),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        width: 58,
+                        // [PROTOCOL-VISUAL-2]: Scaled width
+                        width: textScaler.scale(58).clamp(58.0, 90.0),
                         margin: const EdgeInsets.symmetric(
                           horizontal: 6,
                           vertical: 10,
@@ -327,7 +338,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                           color: isSelected
                               ? colors.accentAction
                               : colors.surfaceHigh,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(Dimens.radiusL),
                           border: Border.all(
                             color: isSelected
                                 ? colors.accentAction
@@ -346,6 +357,8 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                                     ? Colors.white.withValues(alpha: 0.8)
                                     : colors.contentTertiary,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -373,6 +386,8 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                                         alpha: 0.6,
                                       ),
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -384,21 +399,30 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
             ),
 
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+            padding: const EdgeInsets.fromLTRB(
+              Dimens.gapXl,
+              Dimens.gapL,
+              Dimens.gapXl,
+              Dimens.gapM,
+            ),
             sliver: SliverToBoxAdapter(
               child: Container(
-                height: 48,
-                padding: const EdgeInsets.all(4),
+                // [PROTOCOL-VISUAL-2]: MinHeight + IntrinsicHeight for reflow
+                constraints: const BoxConstraints(minHeight: 48),
+                padding: const EdgeInsets.all(Dimens.gapXs),
                 decoration: BoxDecoration(
                   color: colors.surfaceHigh,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: colors.divider),
                 ),
-                child: Row(
-                  children: [
-                    _buildSwitchTab(0, "Личные", colors),
-                    _buildSwitchTab(1, "Общие", colors),
-                  ],
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildSwitchTab(0, "Личные", colors),
+                      _buildSwitchTab(1, "Общие", colors),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -417,7 +441,9 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
         },
         backgroundColor: colors.accentAction,
         elevation: 6,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Dimens.radiusL),
+        ),
         child: const Icon(
           Icons.add_task_rounded,
           color: Colors.white,
@@ -446,6 +472,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
               fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
               color: isSelected ? Colors.white : colors.contentSecondary,
             ),
+            textAlign: TextAlign.center,
           ),
         ),
       ),
@@ -504,10 +531,15 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                   key: ValueKey(
                     "TaskList_${_selectedDate.toIso8601String()}_$_isSearchMode",
                   ),
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+                  padding: const EdgeInsets.fromLTRB(
+                    Dimens.gapXl,
+                    0,
+                    Dimens.gapXl,
+                    100,
+                  ),
                   itemCount: filteredTasks.length,
                   itemBuilder: (context, index) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: Dimens.gapS),
                     child: _buildCompactTaskCard(
                       filteredTasks[index],
                       proColors,
@@ -537,7 +569,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
             foregroundColor: Colors.white,
             icon: Icons.edit_note_rounded,
             borderRadius: const BorderRadius.horizontal(
-              left: Radius.circular(16),
+              left: Radius.circular(Dimens.radiusL),
             ),
           ),
         ],
@@ -552,7 +584,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
             foregroundColor: Colors.white,
             icon: Icons.delete_outline_rounded,
             borderRadius: const BorderRadius.horizontal(
-              right: Radius.circular(16),
+              right: Radius.circular(Dimens.radiusL),
             ),
           ),
         ],
@@ -560,11 +592,11 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
       child: Container(
         decoration: BoxDecoration(
           color: colors.surfaceHigh,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Dimens.radiusL),
           border: Border.all(color: colors.divider),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Dimens.radiusL),
           child: IntrinsicHeight(
             child: Row(
               children: [
@@ -591,7 +623,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: Dimens.gapXs),
                               Row(
                                 children: [
                                   Container(
@@ -614,7 +646,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: Dimens.gapS),
                                   _buildImportanceBadge(
                                     task.importance,
                                     colors,
@@ -774,14 +806,14 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
             decoration: BoxDecoration(
               color: Theme.of(context).scaffoldBackgroundColor,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+                top: Radius.circular(Dimens.radiusXl),
               ),
             ),
             padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              bottom: MediaQuery.of(context).viewInsets.bottom + Dimens.gapXl,
             ),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(Dimens.gapXl),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -796,12 +828,12 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: Dimens.gapXl),
 
                   // Fixed Point 3: Small, compatible "Passed Date" Notification inside sheet
                   if (isPast)
                     Container(
-                      margin: const EdgeInsets.only(bottom: 16),
+                      margin: const EdgeInsets.only(bottom: Dimens.gapL),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 6,
@@ -821,7 +853,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                             size: 14,
                             color: colors.warning,
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: Dimens.gapS),
                           Text(
                             "Задача в прошлом",
                             style: GoogleFonts.inter(
@@ -841,7 +873,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: Dimens.module),
 
                   TextField(
                     controller: _taskController,
@@ -869,7 +901,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                         colors,
                         () => setSheetState(() => localIsShared = false),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: Dimens.gapM),
                       _typeChip(
                         "Общая",
                         localIsShared,
@@ -906,7 +938,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                     (m) => setSheetState(() => _tempRecurrenceMode = m),
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: Dimens.gapL),
                   _buildDetailedRecurrenceContent(
                     colors,
                     isDark,
@@ -915,8 +947,8 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
 
                   _buildLabel("УВЕДОМЛЕНИЯ"),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: Dimens.gapS,
+                    runSpacing: Dimens.gapS,
                     children: [
                       ..._tempReminders.map(
                         (t) => GestureDetector(
@@ -951,7 +983,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                   ),
 
                   // Fixed Point 7: Less space after reminder section and before buttons
-                  const SizedBox(height: 24),
+                  const SizedBox(height: Dimens.gapXl),
                   Row(
                     children: [
                       Expanded(
@@ -959,7 +991,9 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                           onPressed: () => Navigator.pop(context),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(color: colors.divider),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: Dimens.gapL,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -967,7 +1001,9 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                           child: const Text("Отмена"),
                         ),
                       ),
-                      const SizedBox(width: 8), // Fixed Point 7: Tightened gap
+                      const SizedBox(
+                        width: Dimens.gapS,
+                      ), // Fixed Point 7: Tightened gap
                       Expanded(
                         child: ElevatedButton(
                           onPressed: _isSaving
@@ -1023,7 +1059,9 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: colors.accentAction,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: Dimens.gapL,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -1167,7 +1205,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
                   colors,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: Dimens.gapM),
               Expanded(
                 child: _buildSmallNumInput(
                   "ОТДЫХ (Y)",
@@ -1178,7 +1216,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Dimens.gapM),
           GestureDetector(
             onTap: () async {
               final picked = await showDatePicker(
@@ -1218,12 +1256,14 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
         height: 300,
         decoration: BoxDecoration(
           color: colors.surfaceHigh,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(Dimens.radiusXl),
+          ),
         ),
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(Dimens.gapL),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1288,16 +1328,19 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
 
   Widget _buildRecurrenceBox(String text, IconData icon, SkladColors colors) =>
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Dimens.gapL,
+          vertical: 14,
+        ),
         decoration: BoxDecoration(
           color: colors.surfaceContainer,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Dimens.radiusL),
           border: Border.all(color: colors.divider),
         ),
         child: Row(
           children: [
             Icon(icon, size: 18, color: colors.accentAction),
-            const SizedBox(width: 12),
+            const SizedBox(width: Dimens.gapM),
             Text(text, style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
           ],
         ),
@@ -1328,7 +1371,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
           filled: true,
           fillColor: colors.surfaceContainer,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Dimens.radiusM),
             borderSide: BorderSide.none,
           ),
         ),
@@ -1337,7 +1380,11 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
   );
 
   Widget _buildLabel(String text) => Padding(
-    padding: const EdgeInsets.only(top: 20, bottom: 8, left: 4),
+    padding: const EdgeInsets.only(
+      top: Dimens.module,
+      bottom: Dimens.gapS,
+      left: Dimens.gapXs,
+    ),
     child: Text(
       text,
       style: GoogleFonts.inter(
@@ -1357,10 +1404,13 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
   ) => GestureDetector(
     onTap: onTap,
     child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Dimens.module,
+        vertical: 10,
+      ),
       decoration: BoxDecoration(
         color: active ? colors.accentAction : colors.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Dimens.radiusM),
       ),
       child: Text(
         label,
@@ -1419,34 +1469,39 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
   Widget _recurrenceToggle(SkladColors colors, Function(int) onSelect) {
     final labels = ["Разово", "Неделя", "Месяц", "Цикл"];
     return Container(
-      height: 44,
+      // [PROTOCOL-VISUAL-2]: Min height constraint + flow support
+      constraints: const BoxConstraints(minHeight: 44),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: colors.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Dimens.radiusM),
       ),
-      child: Row(
-        children: List.generate(
-          4,
-          (i) => Expanded(
-            child: GestureDetector(
-              onTap: () => onSelect(i),
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _tempRecurrenceMode == i
-                      ? colors.accentAction
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  labels[i],
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: List.generate(
+            4,
+            (i) => Expanded(
+              child: GestureDetector(
+                onTap: () => onSelect(i),
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
                     color: _tempRecurrenceMode == i
-                        ? Colors.white
-                        : colors.contentSecondary,
+                        ? colors.accentAction
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    labels[i],
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: _tempRecurrenceMode == i
+                          ? Colors.white
+                          : colors.contentSecondary,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
               ),
@@ -1462,7 +1517,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
     SkladColors colors,
     VoidCallback onDelete,
   ) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    padding: const EdgeInsets.symmetric(horizontal: Dimens.gapM, vertical: 6),
     decoration: BoxDecoration(
       color: colors.accentAction.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(10),
@@ -1525,11 +1580,11 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
       fontWeight: FontWeight.bold,
     ),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(Dimens.radiusL),
       borderSide: BorderSide.none,
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(Dimens.radiusL),
       borderSide: BorderSide(color: colors.accentAction, width: 2),
     ),
   );
@@ -1593,7 +1648,7 @@ class _PlannerPageState extends ConsumerState<PlannerPage> {
             size: 84,
             color: colors.contentTertiary.withValues(alpha: 0.5),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Dimens.gapL),
           Text(
             isSearch ? 'Ничего не найдено' : 'Свободный день',
             style: GoogleFonts.inter(

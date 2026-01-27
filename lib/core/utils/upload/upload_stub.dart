@@ -1,8 +1,6 @@
-import 'package:dio/dio.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:cross_file/cross_file.dart';
 
-Future<MultipartFile> prepareUploadFile(String path, XFile originalFile) async {
-  // Web: Safe implementation using bytes
-  final bytes = await originalFile.readAsBytes();
-  return MultipartFile.fromBytes(bytes, filename: 'pfp_upload.jpg');
+Future<XFile?> pickFileImpl() async {
+  // Stub implementation returns null or throws UnimplementedError
+  throw UnimplementedError('File picking not implemented on this platform');
 }
